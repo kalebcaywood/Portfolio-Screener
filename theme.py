@@ -1,10 +1,52 @@
 """Shared visual theme — University of Tennessee palette + plotly template + badges."""
 from __future__ import annotations
 
+import base64
+from pathlib import Path
+
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
 import streamlit as st
+
+# Path to the Power T logo. We search for any common image file in assets/
+# and pick the first match. Falls back to a CSS-only "UT" mark if none found.
+_ASSETS_DIR = Path(__file__).parent / "assets"
+_LOGO_CANDIDATES = [
+    "power_t.png", "power_t.jpg", "power_t.jpeg", "power_t.svg", "power_t.webp",
+    "Power T.jpg", "Power T.png", "Power T.jpeg",
+    "powerT.png", "powerT.jpg", "logo.png", "logo.jpg",
+]
+_MIME_BY_EXT = {
+    ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+    ".svg": "image/svg+xml", ".webp": "image/webp",
+}
+
+
+def _logo_data_uri() -> str | None:
+    """Return a base64 data URI for the Power T, or None if no logo file is found."""
+    if not _ASSETS_DIR.exists():
+        return None
+    # Try named candidates first
+    for name in _LOGO_CANDIDATES:
+        path = _ASSETS_DIR / name
+        if path.exists() and path.is_file():
+            return _encode_image(path)
+    # Otherwise, take the first image file in assets/
+    for path in sorted(_ASSETS_DIR.iterdir()):
+        if path.suffix.lower() in _MIME_BY_EXT:
+            return _encode_image(path)
+    return None
+
+
+def _encode_image(path: Path) -> str | None:
+    try:
+        mime = _MIME_BY_EXT.get(path.suffix.lower(), "image/png")
+        with open(path, "rb") as f:
+            encoded = base64.b64encode(f.read()).decode("ascii")
+        return f"data:{mime};base64,{encoded}"
+    except Exception:
+        return None
 
 # ─── University of Tennessee brand colors ────────────────────────────────────
 UT_ORANGE     = "#FF8200"   # Tennessee Orange (primary)
@@ -275,10 +317,15 @@ a:hover {
 .ut-header {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 20px;
     padding: 18px 0 16px 0;
     border-bottom: 3px solid #FF8200;
     margin-bottom: 24px;
+}
+.ut-logo-wrap {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
 }
 .ut-mark {
     background: #FF8200;
@@ -398,11 +445,20 @@ def setup_page(title: str, layout: str = "wide") -> None:
 
 def ut_header(title: str = "Quantitative Portfolio Analytics",
                supratitle: str = "University of Tennessee") -> None:
-    """Render the UT-branded header bar (used on the Home page)."""
+    """Render the UT-branded header — Power T logo on the left, wordmark on the right."""
+    data_uri = _logo_data_uri()
+    if data_uri:
+        mark_html = (
+            f'<img src="{data_uri}" alt="UT" '
+            'style="height:72px; width:auto; display:block;">'
+        )
+    else:
+        mark_html = '<div class="ut-mark">UT</div>'
+
     st.markdown(
         f"""
 <div class="ut-header">
-    <div class="ut-mark">UT</div>
+    <div class="ut-logo-wrap">{mark_html}</div>
     <div class="ut-wordmark">
         <div class="ut-supratitle">{supratitle}</div>
         <div class="ut-title">{title}</div>
@@ -415,10 +471,19 @@ def ut_header(title: str = "Quantitative Portfolio Analytics",
 
 def ut_sidebar_brand(label: str = "Portfolio Analytics") -> None:
     """Render a small UT brand bar at the top of the sidebar."""
+    data_uri = _logo_data_uri()
+    if data_uri:
+        mark_html = (
+            f'<img src="{data_uri}" alt="UT" '
+            'style="height:36px; width:auto; display:block;">'
+        )
+    else:
+        mark_html = '<div class="ut-sidebar-mark">UT</div>'
+
     st.sidebar.markdown(
         f"""
 <div class="ut-sidebar-brand">
-    <div class="ut-sidebar-mark">UT</div>
+    {mark_html}
     <div class="ut-sidebar-text">{label}</div>
 </div>
 """,
