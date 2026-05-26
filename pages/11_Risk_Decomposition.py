@@ -12,10 +12,11 @@ import factor_models as FM
 import risk as R
 from data import (FACTOR_PROXIES, fetch_currency_map, fetch_prices,
                    portfolio_returns, require_portfolio)
-from theme import badge, inject_css
+from theme import badge, inject_css, ut_sidebar_brand
 
 st.set_page_config(page_title="Risk Decomposition", layout="wide")
 inject_css()
+ut_sidebar_brand()
 st.title("Risk Decomposition & Improvement Suggestions")
 st.caption(
     "Splits portfolio risk into **systematic** (market-driven) vs **idiosyncratic** "

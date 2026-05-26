@@ -8,10 +8,11 @@ import streamlit as st
 
 import risk as R
 from data import require_portfolio
-from theme import inject_css
+from theme import inject_css, ut_sidebar_brand
 
 st.set_page_config(page_title="Stress Tests", layout="wide")
 inject_css()
+ut_sidebar_brand()
 st.title("Stress Tests")
 st.caption("Replay historical crises and apply custom return shocks to gauge portfolio resilience.")
 

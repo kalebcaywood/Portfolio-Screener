@@ -8,12 +8,13 @@ import plotly.figure_factory as ff
 import streamlit as st
 
 from data import require_portfolio
-from theme import inject_css
+from theme import inject_css, ut_sidebar_brand
 from scipy.cluster.hierarchy import linkage, fcluster
 from scipy.spatial.distance import squareform
 
 st.set_page_config(page_title="Correlation", layout="wide")
 inject_css()
+ut_sidebar_brand()
 st.title("Correlation & Co-movement Analysis")
 st.caption("Pairwise correlations, rolling co-movement, and hierarchical clustering of return patterns.")
 

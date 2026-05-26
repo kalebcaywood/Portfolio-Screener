@@ -9,10 +9,11 @@ import streamlit as st
 
 import optimization as O
 from data import require_portfolio
-from theme import inject_css
+from theme import inject_css, ut_sidebar_brand
 
 st.set_page_config(page_title="Optimization", layout="wide")
 inject_css()
+ut_sidebar_brand()
 st.title("Portfolio Optimization")
 st.caption("Modern Portfolio Theory: efficient frontier, max-Sharpe, min-variance, Equal Risk Contribution.")
 

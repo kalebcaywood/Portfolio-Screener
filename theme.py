@@ -1,4 +1,4 @@
-"""Shared visual theme: plotly template, typography CSS, badge helper, status line."""
+"""Shared visual theme — University of Tennessee palette + plotly template + badges."""
 from __future__ import annotations
 
 import pandas as pd
@@ -6,28 +6,47 @@ import plotly.graph_objects as go
 import plotly.io as pio
 import streamlit as st
 
-# ─── Color palette ────────────────────────────────────────────────────────────
-PRIMARY      = "#1e40af"
-ACCENT_BLUE  = "#3b82f6"
-ACCENT_TEAL  = "#0891b2"
-ACCENT_PURPLE = "#7c3aed"
+# ─── University of Tennessee brand colors ────────────────────────────────────
+UT_ORANGE     = "#FF8200"   # Tennessee Orange (primary)
+UT_SMOKEY     = "#58595B"   # Smokey gray
+UT_WHITE      = "#FFFFFF"
+UT_VALLEY     = "#006C93"   # Valley blue
+UT_LECONTE    = "#8D2048"   # Leconte burgundy
+UT_REGALIA    = "#4B306A"   # Regalia purple
+UT_SUNSPHERE  = "#FED535"   # Sunsphere yellow (use sparingly)
+UT_LEGACY     = "#B7A57A"   # Legacy tan
+UT_ROCK       = "#E8E8E8"   # Rock gray
+UT_RIVER      = "#517C96"   # River blue
+UT_GLOBE      = "#0C2340"   # Globe deep navy
+
+# Functional aliases used throughout the app
+PRIMARY      = UT_ORANGE
 SUCCESS      = "#15803d"
 WARNING      = "#b45309"
 DANGER       = "#b91c1c"
-NEUTRAL      = "#475569"
-BG           = "#ffffff"
-SOFT_BG      = "#f8fafc"
-TEXT         = "#0f172a"
-MUTED_TEXT   = "#64748b"
-GRID         = "#e2e8f0"
+TEXT         = "#1a1a1a"
+MUTED_TEXT   = UT_SMOKEY
+BG           = UT_WHITE
+SOFT_BG      = "#f7f7f5"
+GRID         = "#e5e5e5"
 
+# Plotly colorway — orange first, then complementary UT palette + neutrals
 COLORWAY = [
-    "#1e40af", "#0891b2", "#15803d", "#b45309", "#7c3aed",
-    "#be185d", "#0f766e", "#a16207", "#1d4ed8", "#9333ea",
-    "#525252", "#0e7490",
+    UT_ORANGE,
+    UT_VALLEY,
+    UT_LECONTE,
+    UT_REGALIA,
+    UT_LEGACY,
+    UT_SMOKEY,
+    UT_RIVER,
+    "#0f766e",   # neutral dark teal
+    "#a16207",   # neutral ochre
+    "#7c3aed",   # neutral violet
+    "#0e7490",   # neutral cyan-dark
+    "#525252",   # neutral mid-gray
 ]
 
-# ─── Plotly template — registered globally ──────────────────────────────────
+# ─── Plotly template ──────────────────────────────────────────────────────────
 pio.templates["quantlab"] = go.layout.Template(
     layout=dict(
         font=dict(family="Inter, -apple-system, BlinkMacSystemFont, sans-serif",
@@ -53,65 +72,61 @@ pio.templates["quantlab"] = go.layout.Template(
         ),
         legend=dict(
             font=dict(size=11, color=TEXT),
-            bgcolor="rgba(255,255,255,0.85)",
+            bgcolor="rgba(255,255,255,0.9)",
             bordercolor=GRID, borderwidth=1,
             orientation="h", y=-0.2, x=0,
         ),
         hoverlabel=dict(
             font=dict(family="Inter", size=12),
-            bgcolor="white", bordercolor=GRID,
+            bgcolor="white", bordercolor=UT_ORANGE,
         ),
         margin=dict(t=50, b=50, l=60, r=20),
         colorscale=dict(
-            sequential=[[0, "#dbeafe"], [1, "#1e3a8a"]],
-            diverging=[[0, "#b91c1c"], [0.5, "#f8fafc"], [1, "#1e40af"]],
+            # Sequential: white → Tennessee Orange
+            sequential=[[0, "#fff4e6"], [0.5, "#ffb04d"], [1, UT_ORANGE]],
+            # Diverging: burgundy (negative) → white → orange (positive)
+            diverging=[[0, UT_LECONTE], [0.5, "#ffffff"], [1, UT_ORANGE]],
         ),
     )
 )
 pio.templates.default = "plotly_white+quantlab"
 
 
-# ─── CSS — kept narrow so it doesn't override Streamlit's icon font ──────────
-# Key principle: only set font-family on `body` and let it inherit. Streamlit
-# uses Material Symbols (a ligature icon font) on chevrons, expander toggles,
-# sidebar collapse buttons, etc. Those elements set their own font-family
-# inline or via more-specific class selectors — leave them alone.
+# ─── CSS — narrow scope so Streamlit's icon font keeps working ───────────────
 _CSS = """
 <style>
 @import url('https://rsms.me/inter/inter.css');
 
-/* Inter on the body only — cascade handles text, while icon-specific
-   font-family declarations from Streamlit's CSS still win on icon elements */
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
-/* Tabular numbers on numeric data only — no font-family change */
+/* Tabular numbers only on numeric displays */
 [data-testid="stMetricValue"], [data-testid="stMetricDelta"] {
     font-feature-settings: 'tnum' 1, 'cv11' 1;
 }
 
-/* Headings — weight / color only, NEVER touch font-family */
+/* Headings — weight / color only, never touch font-family */
 .stApp h1 {
-    font-weight: 600;
+    font-weight: 700;
     letter-spacing: -0.025em;
-    color: #0f172a;
+    color: #1a1a1a;
     margin-bottom: 0.5rem;
 }
 .stApp h2 {
     font-weight: 600;
     letter-spacing: -0.015em;
-    color: #0f172a;
+    color: #1a1a1a;
     margin-top: 1.5rem;
 }
 .stApp h3 {
     font-weight: 600;
     letter-spacing: -0.01em;
-    color: #1e293b;
+    color: #2a2a2a;
 }
 .stApp h5 {
     font-weight: 600;
-    color: #1e293b;
+    color: #2a2a2a;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     font-size: 11px;
@@ -119,33 +134,35 @@ body {
     margin-bottom: 0.5rem;
 }
 
-/* Caption softening */
+/* Captions */
 [data-testid="stCaptionContainer"] {
-    color: #64748b;
+    color: #58595B;
 }
 
-/* Metric card visual */
+/* Metric cards — white background with a thin orange top border for brand */
 [data-testid="stMetric"] {
-    background: #f8fafc;
+    background: #ffffff;
     padding: 14px 16px;
-    border-radius: 8px;
-    border: 1px solid #e2e8f0;
-    transition: border-color 0.2s;
+    border-radius: 6px;
+    border: 1px solid #e5e5e5;
+    border-top: 3px solid #FF8200;
+    transition: box-shadow 0.2s, border-color 0.2s;
 }
 [data-testid="stMetric"]:hover {
-    border-color: #cbd5e1;
+    box-shadow: 0 1px 3px rgba(255, 130, 0, 0.15);
+    border-color: #FF8200;
 }
 [data-testid="stMetricLabel"] {
     font-size: 11px;
-    color: #64748b;
-    font-weight: 500;
-    letter-spacing: 0.04em;
+    color: #58595B;
+    font-weight: 600;
+    letter-spacing: 0.05em;
     text-transform: uppercase;
 }
 [data-testid="stMetricValue"] {
     font-size: 22px;
-    font-weight: 600;
-    color: #0f172a;
+    font-weight: 700;
+    color: #1a1a1a;
     line-height: 1.2;
 }
 [data-testid="stMetricDelta"] {
@@ -153,15 +170,15 @@ body {
     font-weight: 500;
 }
 
-/* Sidebar */
+/* Sidebar — light gray with orange left border */
 [data-testid="stSidebar"] {
-    background-color: #f8fafc;
-    border-right: 1px solid #e2e8f0;
+    background-color: #f7f7f5;
+    border-right: 3px solid #FF8200;
 }
 
-/* DataFrame border */
+/* DataFrame */
 .stDataFrame {
-    border: 1px solid #e2e8f0;
+    border: 1px solid #e5e5e5;
     border-radius: 6px;
     overflow: hidden;
 }
@@ -169,91 +186,199 @@ body {
 /* Section divider */
 hr {
     margin: 1.5rem 0;
-    border-color: #e2e8f0;
+    border-color: #e5e5e5;
     border-top-width: 1px;
 }
 
-/* Tabs */
+/* Tabs — orange active state */
 .stTabs [data-baseweb="tab-list"] {
     gap: 4px;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 2px solid #e5e5e5;
 }
 .stTabs [data-baseweb="tab"] {
     font-size: 13px;
     font-weight: 500;
-    color: #64748b;
+    color: #58595B;
     padding: 8px 14px;
 }
 .stTabs [aria-selected="true"] {
-    color: #1e40af;
-    font-weight: 600;
+    color: #FF8200;
+    font-weight: 700;
+    border-bottom-color: #FF8200 !important;
 }
 
-/* Buttons */
+/* Buttons — primary in Tennessee Orange */
 .stButton button[kind="primary"] {
-    background-color: #1e40af;
-    border-color: #1e40af;
-    font-weight: 500;
+    background-color: #FF8200;
+    border-color: #FF8200;
+    color: #ffffff;
+    font-weight: 600;
+    letter-spacing: 0.02em;
 }
 .stButton button[kind="primary"]:hover {
-    background-color: #1e3a8a;
-    border-color: #1e3a8a;
+    background-color: #E07300;
+    border-color: #E07300;
+    color: #ffffff;
+}
+.stButton button[kind="primary"]:active {
+    background-color: #BF6300;
+    border-color: #BF6300;
 }
 .stButton button {
-    border-radius: 6px;
+    border-radius: 4px;
     font-weight: 500;
 }
 
-/* Inputs */
+/* Inputs — focus outline in orange */
+.stTextInput input:focus, .stNumberInput input:focus, .stTextArea textarea:focus,
+.stSelectbox [data-baseweb="select"]:focus-within {
+    border-color: #FF8200 !important;
+    box-shadow: 0 0 0 1px #FF8200 !important;
+}
 .stTextInput input, .stNumberInput input, .stTextArea textarea {
-    border-radius: 6px;
+    border-radius: 4px;
     border-color: #cbd5e1;
+}
+
+/* Links */
+a, .stApp a {
+    color: #FF8200;
+    text-decoration: none;
+}
+a:hover {
+    text-decoration: underline;
 }
 
 /* Alerts */
 .stAlert {
     border-radius: 6px;
+    border-left: 4px solid #FF8200;
+}
+
+/* Slider — orange track */
+.stSlider [role="slider"] {
+    background-color: #FF8200 !important;
+}
+
+/* Checkbox / radio — orange when selected */
+.stCheckbox [aria-checked="true"], .stRadio [aria-checked="true"] {
+    background-color: #FF8200 !important;
+    border-color: #FF8200 !important;
+}
+
+/* Progress bar */
+.stProgress > div > div > div {
+    background-color: #FF8200 !important;
+}
+
+/* UT brand header strip — used at the top of the Home page */
+.ut-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 18px 0 16px 0;
+    border-bottom: 3px solid #FF8200;
+    margin-bottom: 24px;
+}
+.ut-mark {
+    background: #FF8200;
+    color: #ffffff;
+    font-weight: 800;
+    font-size: 22px;
+    letter-spacing: 0.04em;
+    padding: 10px 16px;
+    border-radius: 4px;
+    line-height: 1;
+    font-family: 'Inter', -apple-system, sans-serif;
+    box-shadow: 0 2px 4px rgba(255, 130, 0, 0.2);
+}
+.ut-wordmark {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.ut-supratitle {
+    color: #FF8200;
+    font-weight: 700;
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+}
+.ut-title {
+    color: #1a1a1a;
+    font-weight: 700;
+    font-size: 22px;
+    letter-spacing: -0.015em;
+    line-height: 1.15;
+}
+
+/* Sidebar brand bar */
+.ut-sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-bottom: 12px;
+    margin-bottom: 8px;
+    border-bottom: 2px solid #FF8200;
+}
+.ut-sidebar-mark {
+    background: #FF8200;
+    color: #ffffff;
+    font-weight: 800;
+    font-size: 14px;
+    letter-spacing: 0.04em;
+    padding: 4px 9px;
+    border-radius: 3px;
+    line-height: 1;
+}
+.ut-sidebar-text {
+    color: #58595B;
+    font-weight: 600;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
 }
 
 /* Status bar */
 .qstatus {
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    padding: 6px 14px;
+    background: #f7f7f5;
+    border: 1px solid #e5e5e5;
+    border-left: 4px solid #FF8200;
+    border-radius: 4px;
+    padding: 8px 14px;
     margin-bottom: 1rem;
     font-size: 12px;
-    color: #475569;
+    color: #58595B;
     display: flex;
     flex-wrap: wrap;
     gap: 1.5rem;
 }
 .qstatus .qstatus-key {
-    color: #94a3b8;
+    color: #888888;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     font-size: 10px;
     margin-right: 6px;
 }
 .qstatus .qstatus-val {
-    color: #0f172a;
-    font-weight: 500;
+    color: #1a1a1a;
+    font-weight: 600;
 }
 
 /* Badges */
 .qbadge {
     display: inline-block;
     padding: 3px 10px;
-    border-radius: 4px;
+    border-radius: 3px;
     font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
+    font-weight: 700;
+    letter-spacing: 0.05em;
     text-transform: uppercase;
     line-height: 1;
 }
 .qbadge-reup, .qbadge-low, .qbadge-success { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
-.qbadge-add, .qbadge-info                  { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
-.qbadge-hold, .qbadge-neutral              { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+.qbadge-add, .qbadge-info                  { background: #fff4e6; color: #c25e00; border: 1px solid #ffd7a8; }
+.qbadge-hold, .qbadge-neutral              { background: #f1f5f9; color: #58595B; border: 1px solid #e5e5e5; }
 .qbadge-trim, .qbadge-medium, .qbadge-warning { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
 .qbadge-exit, .qbadge-high, .qbadge-danger { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
 </style>
@@ -261,14 +386,44 @@ hr {
 
 
 def inject_css() -> None:
-    """Inject the global CSS. Call this once per page after st.set_page_config."""
+    """Inject the global CSS. Call once per page after st.set_page_config."""
     st.markdown(_CSS, unsafe_allow_html=True)
 
 
 def setup_page(title: str, layout: str = "wide") -> None:
-    """Convenience: set_page_config + inject CSS in one call."""
+    """set_page_config + inject CSS in one call."""
     st.set_page_config(page_title=title, layout=layout)
     inject_css()
+
+
+def ut_header(title: str = "Quantitative Portfolio Analytics",
+               supratitle: str = "University of Tennessee") -> None:
+    """Render the UT-branded header bar (used on the Home page)."""
+    st.markdown(
+        f"""
+<div class="ut-header">
+    <div class="ut-mark">UT</div>
+    <div class="ut-wordmark">
+        <div class="ut-supratitle">{supratitle}</div>
+        <div class="ut-title">{title}</div>
+    </div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+
+def ut_sidebar_brand(label: str = "Portfolio Analytics") -> None:
+    """Render a small UT brand bar at the top of the sidebar."""
+    st.sidebar.markdown(
+        f"""
+<div class="ut-sidebar-brand">
+    <div class="ut-sidebar-mark">UT</div>
+    <div class="ut-sidebar-text">{label}</div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
 
 
 def badge(label: str, kind: str | None = None) -> str:
@@ -280,16 +435,12 @@ def badge(label: str, kind: str | None = None) -> str:
 def status_line(positions: int, aum: float, last_date, benchmark: str = "SPX",
                  period: str = "", net: float | None = None,
                  gross: float | None = None) -> None:
-    """Render a one-line status bar at the top of analytics pages."""
+    """One-line status bar for analytics pages."""
     if hasattr(last_date, "strftime"):
         last_str = last_date.strftime("%Y-%m-%d")
     else:
         last_str = str(last_date)
-
-    parts = [
-        ("Positions", str(positions)),
-        ("AUM", f"${aum:,.0f}"),
-    ]
+    parts = [("Positions", str(positions)), ("AUM", f"${aum:,.0f}")]
     if net is not None:
         parts.append(("Net", f"{net:.1%}"))
     if gross is not None:
@@ -298,21 +449,19 @@ def status_line(positions: int, aum: float, last_date, benchmark: str = "SPX",
         parts.append(("Lookback", period))
     parts.append(("Through", last_str))
     parts.append(("Benchmark", benchmark))
-
     spans = [
         f'<span><span class="qstatus-key">{k}</span><span class="qstatus-val">{v}</span></span>'
         for k, v in parts
     ]
-    st.markdown(f'<div class="qstatus">{"".join(spans)}</div>',
-                unsafe_allow_html=True)
+    st.markdown(f'<div class="qstatus">{"".join(spans)}</div>', unsafe_allow_html=True)
 
 
 # ─── DataFrame styling helpers ────────────────────────────────────────────────
 
 REC_PALETTE: dict[str, tuple[str, str]] = {
     "REUP": ("#dcfce7", "#15803d"),
-    "ADD":  ("#dbeafe", "#1e40af"),
-    "HOLD": ("#f1f5f9", "#475569"),
+    "ADD":  ("#fff4e6", "#c25e00"),
+    "HOLD": ("#f1f5f9", "#58595B"),
     "TRIM": ("#fef3c7", "#b45309"),
     "EXIT": ("#fee2e2", "#b91c1c"),
 }
@@ -320,13 +469,12 @@ REC_PALETTE: dict[str, tuple[str, str]] = {
 SEVERITY_PALETTE: dict[str, tuple[str, str]] = {
     "high":   ("#fee2e2", "#b91c1c"),
     "medium": ("#fef3c7", "#b45309"),
-    "info":   ("#dbeafe", "#1e40af"),
+    "info":   ("#fff4e6", "#c25e00"),
     "low":    ("#dcfce7", "#15803d"),
 }
 
 
 def style_recommendation_column(df: pd.DataFrame, col: str = "recommendation"):
-    """Apply background + text color to a recommendation column."""
     def _style(val):
         if not isinstance(val, str):
             return ""
@@ -338,7 +486,6 @@ def style_recommendation_column(df: pd.DataFrame, col: str = "recommendation"):
 
 
 def style_severity_column(df: pd.DataFrame, col: str = "severity"):
-    """Apply background + text color to a severity column."""
     def _style(val):
         if not isinstance(val, str):
             return ""

@@ -9,10 +9,11 @@ import streamlit as st
 
 import risk as R
 from data import portfolio_returns, require_portfolio
-from theme import inject_css
+from theme import inject_css, ut_sidebar_brand
 
 st.set_page_config(page_title="Risk Metrics", layout="wide")
 inject_css()
+ut_sidebar_brand()
 st.title("Risk Metrics")
 st.caption("Value-at-Risk, Conditional VaR, component risk contribution, diversification.")
 

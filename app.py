@@ -11,7 +11,7 @@ import streamlit as st
 from data import BENCHMARK, RISK_FREE_RATE, compute_returns, fetch_prices
 from portfolio_input import (clean_ticker, df_to_weight_series, is_valid_ticker,
                               normalize_weights, parse_csv, validate_price_data)
-from theme import inject_css, status_line
+from theme import inject_css, status_line, ut_header, ut_sidebar_brand
 
 
 SAMPLE_CSV = """ticker,description,weight
@@ -85,9 +85,10 @@ def render_exposure_preview(metrics: dict, title: str = "Live exposure preview")
         label = "Custom"
     c[5].metric("Strategy", label)
 
-st.set_page_config(page_title="Quant Portfolio Lab", layout="wide")
+st.set_page_config(page_title="UT Portfolio Analytics", layout="wide", page_icon=":material/show_chart:")
 inject_css()
-st.title("Quantitative Portfolio Analytics")
+ut_sidebar_brand()
+ut_header("Quantitative Portfolio Analytics", "University of Tennessee")
 
 with st.expander("Feature map", expanded=False):
     st.markdown(

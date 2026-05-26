@@ -23,10 +23,11 @@ import streamlit as st
 import analytics as A
 import factor_models as FM
 from data import portfolio_returns, require_portfolio
-from theme import REC_PALETTE, badge, inject_css, style_recommendation_column
+from theme import REC_PALETTE, badge, inject_css, style_recommendation_column, ut_sidebar_brand
 
 st.set_page_config(page_title="Pacing & Reup", layout="wide")
 inject_css()
+ut_sidebar_brand()
 st.title("Commitment Pacing & Reup / Pullback Decisions")
 st.caption(
     "Track each position's vintage-to-date performance, get composite reup signals "
