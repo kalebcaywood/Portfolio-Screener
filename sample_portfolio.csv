@@ -1,0 +1,13 @@
+ticker,description,weight
+AAPL,Apple Inc.,0.12
+MSFT,Microsoft Corporation,0.12
+GOOGL,Alphabet Inc. Class A,0.10
+NVDA,NVIDIA Corporation,0.10
+META,Meta Platforms Inc.,0.08
+JPM,JPMorgan Chase & Co.,0.08
+JNJ,Johnson & Johnson,0.08
+XOM,Exxon Mobil Corporation,0.08
+PG,Procter & Gamble Company,0.08
+KO,Coca-Cola Company,0.06
+V,Visa Inc.,0.06
+UNH,UnitedHealth Group,0.04

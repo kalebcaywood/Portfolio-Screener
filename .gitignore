@@ -1,0 +1,56 @@
+# ─── Python ──────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+.Python
+build/
+dist/
+.eggs/
+*.manifest
+*.spec
+
+# ─── Virtual environments ────────────────────────────────────────────────────
+.venv/
+venv/
+ENV/
+env/
+.python-version
+
+# ─── Editors / IDEs ──────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ─── Streamlit / runtime ─────────────────────────────────────────────────────
+.streamlit/secrets.toml
+.streamlit/cache/
+*.log
+
+# ─── Jupyter / notebooks ─────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ─── Project-local scratch files ─────────────────────────────────────────────
+# These are helpful for local development but don't belong in the repo
+_smoke_test.py
+_check_imports.py
+
+# ─── User portfolio files (privacy) ──────────────────────────────────────────
+# Keep the sample, exclude anything personal
+my_portfolio*.csv
+private_*.csv
+position_breakdown.csv
+screener_results.csv
+
+# ─── OS / misc ───────────────────────────────────────────────────────────────
+*.bak
+*.tmp
+
+# ─── Claude Code local settings ──────────────────────────────────────────────
+.claude/
