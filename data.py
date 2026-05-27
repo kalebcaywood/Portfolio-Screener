@@ -195,10 +195,22 @@ def fetch_currency_info(ticker: str) -> dict:
             "exchange": info.get("exchange") or info.get("fullExchangeName") or "",
             "long_name": info.get("longName") or info.get("shortName") or ticker,
             "quote_type": info.get("quoteType") or "",
+            "sector": info.get("sector") or "",
+            "industry": info.get("industry") or "",
         }
     except Exception:
         return {"currency": "USD", "country": "", "exchange": "",
-                "long_name": ticker, "quote_type": ""}
+                "long_name": ticker, "quote_type": "", "sector": "", "industry": ""}
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def fetch_sector(ticker: str) -> str:
+    """Return GICS sector for a ticker, or '' if unavailable. Cached 24h."""
+    try:
+        info = yf.Ticker(ticker).info or {}
+        return info.get("sector") or ""
+    except Exception:
+        return ""
 
 
 def fetch_currency_map(tickers) -> dict:

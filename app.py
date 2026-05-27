@@ -107,6 +107,7 @@ with st.expander("Feature map", expanded=False):
 | **Currency & Rates** | FX exposure by currency / country, FX-impact attribution, US Treasury yield curve, bond-ETF proxies for foreign rates, FX pair explorer |
 | **Risk Decomposition** | Systematic vs idiosyncratic split (CAPM + multi-factor), concentration / sector / country, tail & drawdown, correlation diagnostics, **rule-based suggestions for improvement** |
 | **Pacing & Reup** | Per-position vintage tracker, composite reup / pullback score, suggested rebalance, bootstrap-based forward probability of success & risk |
+| **Fund Holdings** | Ingest large Bloomberg-format multi-fund books (thousands of positions); geographic breakdown, fund × geography concentration heatmap, on-demand sector analysis, top holdings |
 """
     )
 
