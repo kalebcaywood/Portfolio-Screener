@@ -45,7 +45,8 @@ sections = {
         st.Page("sections/fund_holdings.py", title="Holdings Analyzer"),
     ],
     "Equity Screener": [
-        st.Page("sections/screener.py", title="Screener"),
+        st.Page("sections/screener.py",     title="Universal Equity Screener"),
+        st.Page("sections/eq_tearsheet.py", title="Equity Tearsheet"),
     ],
     "Return Stream Analyzer": [
         st.Page("sections/rs_home.py",        title="Home",                url_path="rs_home"),
