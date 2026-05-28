@@ -136,6 +136,45 @@ with st.expander("Accepted formats", expanded=False):
         language="csv",
     )
 
+with st.expander("eVestment / institutional database exports", expanded=False):
+    st.markdown(
+        """
+**eVestment** (Nasdaq eVestment) exports two common formats — both work here:
+
+**Export type A — "Returns by manager" (wide)**
+Typical column layout from eVestment Analytics:
+```
+Product Name, Strategy, Vehicle, AUM ($M),
+2024-01, 2024-02, 2024-03, ..., 2025-12
+```
+
+To use this directly:
+1. Open in Excel and **transpose** (Paste Special → Transpose) so dates are rows and
+   product names are columns
+2. Save as CSV and upload here
+
+Or — if the export already has dates as a column, just upload as-is.
+
+**Export type B — "Stacked returns" (long)**
+```
+Product Code, Product Name, Strategy, AsOfDate, ReturnGrossNet, Return
+ABC-001, Growth Fund, US Large Growth, 2024-01-31, Net, 0.0142
+ABC-001, Growth Fund, US Large Growth, 2024-02-29, Net, -0.0273
+DEF-002, Value Fund, US Large Value, 2024-01-31, Net, 0.0089
+```
+
+This **already parses** as long format. The columns the parser looks for:
+- Date column: `AsOfDate`, `Date`, `Period`, `MonthEnd`, `ReportDate`
+- Stream column: `ProductName`, `Manager`, `Strategy`, `Name`, `Stream`
+- Return column: `Return`, `MonthlyReturn`, `NetReturn`, `Performance`
+
+**Programmatic eVestment API** integration isn't available yet (requires an
+institutional license and OAuth setup). When you have credentials, an
+"eVestment Connect" mode can be added that pulls directly from their REST
+endpoints into the same internal format the rest of the app already uses.
+"""
+    )
+
 # ─── Sidebar settings ───────────────────────────────────────────────────────
 st.sidebar.header("RSA settings")
 rf_input = st.sidebar.number_input(

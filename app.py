@@ -48,8 +48,11 @@ sections = {
         st.Page("sections/screener.py", title="Screener"),
     ],
     "Return Stream Analyzer": [
-        st.Page("sections/rs_home.py",        title="Home", url_path="rs_home"),
+        st.Page("sections/rs_home.py",        title="Home",                url_path="rs_home"),
         st.Page("sections/rs_performance.py", title="Performance & Risk"),
+        st.Page("sections/rs_risk.py",        title="Risk Metrics",        url_path="rs_risk"),
+        st.Page("sections/rs_stats_tests.py", title="Statistical Tests",   url_path="rs_stats_tests"),
+        st.Page("sections/rs_factor.py",      title="Factor Models",       url_path="rs_factor"),
         st.Page("sections/rs_comparison.py",  title="Stream Comparison"),
     ],
     "Credit Analyzer": [
