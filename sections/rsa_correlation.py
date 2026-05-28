@@ -7,7 +7,7 @@ import plotly.express as px
 import plotly.figure_factory as ff
 import streamlit as st
 
-from data import require_portfolio
+from data import benchmark_picker_and_data, require_portfolio
 from theme import inject_css
 from scipy.cluster.hierarchy import linkage, fcluster
 from scipy.spatial.distance import squareform
@@ -16,7 +16,8 @@ inject_css()
 st.title("Correlation & Co-movement Analysis")
 st.caption("Pairwise correlations, rolling co-movement, and hierarchical clustering of return patterns.")
 
-tickers, weights, prices, returns, bench_prices, bench_returns, rf = require_portfolio()
+tickers, weights, prices, returns, _, _, rf = require_portfolio()
+bench_name, bench_prices, bench_returns = benchmark_picker_and_data()
 
 method = st.sidebar.radio("Correlation method", ["pearson", "spearman", "kendall"], index=0)
 corr = returns.corr(method=method)

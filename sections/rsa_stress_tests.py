@@ -7,14 +7,15 @@ import plotly.express as px
 import streamlit as st
 
 import risk as R
-from data import require_portfolio
+from data import benchmark_picker_and_data, require_portfolio
 from theme import inject_css
 
 inject_css()
 st.title("Stress Tests")
 st.caption("Replay historical crises and apply custom return shocks to gauge portfolio resilience.")
 
-tickers, weights, prices, returns, bench_prices, bench_returns, rf = require_portfolio()
+tickers, weights, prices, returns, _, _, rf = require_portfolio()
+bench_name, bench_prices, bench_returns = benchmark_picker_and_data()
 
 tab_hist, tab_custom, tab_factor = st.tabs(["Historical scenarios", "Custom asset shocks", "Beta-driven market shock"])
 

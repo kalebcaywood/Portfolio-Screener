@@ -22,7 +22,7 @@ import streamlit as st
 
 import analytics as A
 import factor_models as FM
-from data import portfolio_returns, require_portfolio
+from data import benchmark_picker_and_data, portfolio_returns, require_portfolio
 from theme import REC_PALETTE, badge, inject_css, style_recommendation_column
 
 inject_css()
@@ -32,7 +32,8 @@ st.caption(
     "with statistical backing, and estimate forward probabilities via bootstrap."
 )
 
-tickers, weights, prices, returns, bench_prices, bench_returns, rf = require_portfolio()
+tickers, weights, prices, returns, _, _, rf = require_portfolio()
+bench_name, bench_prices, bench_returns = benchmark_picker_and_data()
 aum = float(st.session_state.get("aum", 100000.0))
 port_ret = portfolio_returns(returns, weights)
 
@@ -256,7 +257,7 @@ with tabs[0]:
         x="ticker", y="total_return", color="alpha_tstat",
         color_continuous_scale="RdBu_r", color_continuous_midpoint=0,
         hover_data=["weight", "ann_vol", "sharpe", "current_dd", "days_held"],
-        title="Vintage-to-date return per position (color = alpha t-stat vs SPX)",
+        title=f"Vintage-to-date return per position (color = alpha t-stat vs {bench_name})",
     )
     fig.update_yaxes(tickformat=".0%")
     st.plotly_chart(fig, width="stretch")

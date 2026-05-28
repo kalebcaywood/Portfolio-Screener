@@ -29,7 +29,6 @@ ut_header("Quantitative Portfolio Analytics", "University of Tennessee")
 sections = {
     "Portfolio Analyzer": [
         st.Page("sections/home.py",               title="Home", default=True),
-        st.Page("sections/benchmarks.py",         title="Major Benchmarks"),
         st.Page("sections/rsa_performance.py",    title="Performance"),
         st.Page("sections/rsa_risk_metrics.py",   title="Risk Metrics"),
         st.Page("sections/rsa_stats_tests.py",    title="Statistical Tests"),

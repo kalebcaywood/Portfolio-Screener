@@ -8,14 +8,15 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import analytics as A
-from data import portfolio_returns, require_portfolio
+from data import benchmark_picker_and_data, portfolio_returns, require_portfolio
 from theme import inject_css
 
 inject_css()
 st.title("Portfolio Performance")
 st.caption("Risk-adjusted returns, drawdown analysis, and benchmark-relative metrics.")
 
-tickers, weights, prices, returns, bench_prices, bench_returns, rf = require_portfolio()
+tickers, weights, prices, returns, _, _, rf = require_portfolio()
+bench_name, bench_prices, bench_returns = benchmark_picker_and_data()
 
 port_ret = portfolio_returns(returns, weights)
 port_cum = (1 + port_ret).cumprod()
@@ -45,7 +46,7 @@ with r2[3]: card("Omega", summary["omega"], "{:.2f}")
 with r2[4]: card("Ulcer Index", summary["ulcer_index"], "{:.4f}")
 
 r3 = st.columns(5)
-with r3[0]: card("Alpha (vs SPX)", summary.get("alpha"))
+with r3[0]: card(f"Alpha (vs {bench_name})", summary.get("alpha"))
 with r3[1]: card("Beta", summary.get("beta"), "{:.2f}")
 with r3[2]: card("R²", summary.get("r_squared"), "{:.3f}")
 with r3[3]: card("Info ratio", summary.get("info_ratio"), "{:.2f}")
@@ -71,7 +72,7 @@ st.markdown("---")
 tabs = st.tabs(["Equity curve", "Drawdowns", "Rolling metrics", "Period returns", "Distribution"])
 
 with tabs[0]:
-    df = pd.DataFrame({"Portfolio": port_cum, "Benchmark (SPX)": bench_cum})
+    df = pd.DataFrame({"Portfolio": port_cum, f"Benchmark ({bench_name})": bench_cum})
     fig = px.line(df, title="Cumulative growth of $1")
     st.plotly_chart(fig, width="stretch")
 
@@ -111,9 +112,9 @@ with tabs[2]:
         fig = px.line(rm["rolling_sharpe"], title=f"Rolling Sharpe ({window}d)")
         st.plotly_chart(fig, width="stretch")
     with c2:
-        fig = px.line(rb, title=f"Rolling Beta vs SPX ({window}d)")
+        fig = px.line(rb, title=f"Rolling Beta vs {bench_name} ({window}d)")
         st.plotly_chart(fig, width="stretch")
-        fig = px.line(rc, title=f"Rolling correlation with SPX ({window}d)")
+        fig = px.line(rc, title=f"Rolling correlation with {bench_name} ({window}d)")
         st.plotly_chart(fig, width="stretch")
 
 with tabs[3]:

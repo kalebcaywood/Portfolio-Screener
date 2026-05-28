@@ -10,7 +10,8 @@ import streamlit as st
 import analytics as A
 import factor_models as FM
 import risk as R
-from data import (FACTOR_PROXIES, fetch_currency_map, fetch_prices,
+from data import (FACTOR_PROXIES, benchmark_picker_and_data,
+                   fetch_currency_map, fetch_prices,
                    portfolio_returns, require_portfolio)
 from theme import badge, inject_css
 
@@ -22,7 +23,8 @@ st.caption(
     "and offers rule-based suggestions for how to improve."
 )
 
-tickers, weights, prices, returns, bench_prices, bench_returns, rf = require_portfolio()
+tickers, weights, prices, returns, _, _, rf = require_portfolio()
+bench_name, bench_prices, bench_returns = benchmark_picker_and_data()
 port_ret = portfolio_returns(returns, weights)
 
 # ─── Portfolio-level CAPM decomposition ───────────────────────────────────────
@@ -73,7 +75,7 @@ with tabs[0]:
 
     c = st.columns(5)
     c[0].metric("Total ann. vol", f"{total_vol:.2%}")
-    c[1].metric("Beta to SPX",
+    c[1].metric(f"Beta to {bench_name}",
                  f"{beta:.3f}" if not np.isnan(beta) else "—")
     c[2].metric("R² (market)",
                  f"{r_squared:.3f}" if not np.isnan(r_squared) else "—")
@@ -256,7 +258,7 @@ with tabs[0]:
 # Tab 2: Active Risk vs Benchmark (tracking error, info ratio, capture)
 # ══════════════════════════════════════════════════════════════════════════════
 with tabs[1]:
-    st.subheader("Active risk vs benchmark (S&P 500)")
+    st.subheader(f"Active risk vs benchmark ({bench_name})")
     st.markdown(
         "Active return = portfolio − benchmark. **Tracking error** is the annualized "
         "standard deviation of active returns — how much your portfolio swings *around* "

@@ -116,6 +116,38 @@ def benchmark_ticker(name: str) -> str:
     return name
 
 
+def benchmark_picker_and_data(default: str = "S&P 500",
+                                period: str | None = None,
+                                location: str = "sidebar",
+                                key: str = "selected_benchmark"
+                                ) -> tuple[str, pd.Series, pd.Series]:
+    """Render a benchmark selector and return (name, prices, returns).
+
+    The selectbox is bound to session_state[key] so the user's choice
+    persists across every analytics page automatically. Pass
+    `location="inline"` to render in the main area instead of the sidebar.
+    """
+    if key not in st.session_state:
+        st.session_state[key] = default
+
+    target = st.sidebar if location == "sidebar" else st
+    target.selectbox(
+        "Comparison benchmark",
+        options=list(MAJOR_BENCHMARKS.keys()),
+        key=key,
+        help="Used for alpha / beta / capture / info ratio / relative analysis on this page",
+    )
+    name = st.session_state[key]
+
+    p = period or st.session_state.get("period", "5y")
+    prices_df = fetch_benchmark_prices((name,), period=p)
+    if prices_df.empty or name not in prices_df.columns:
+        return name, pd.Series(dtype=float), pd.Series(dtype=float)
+    series = prices_df[name].dropna()
+    returns = series.pct_change().dropna()
+    return name, series, returns
+
+
 @st.cache_data(ttl=1800, show_spinner=False)
 def fetch_benchmark_prices(names: tuple, period: str = "5y") -> pd.DataFrame:
     """Fetch price series for one or more benchmarks by their friendly name.

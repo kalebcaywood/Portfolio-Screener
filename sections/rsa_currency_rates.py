@@ -8,14 +8,16 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from data import (BOND_ETFS, CURRENCY_TO_FX, FX_PAIRS, RATE_INDICATORS,
-                   fetch_currency_map, fetch_prices, require_portfolio)
+                   benchmark_picker_and_data, fetch_currency_map,
+                   fetch_prices, require_portfolio)
 from theme import inject_css
 
 inject_css()
 st.title("Currency Risk & Interest Rates")
 st.caption("Currency exposure of your holdings, FX-impact attribution on returns, and global rate / FX dashboards.")
 
-tickers, weights, prices, returns, bench_prices, bench_returns, rf = require_portfolio()
+tickers, weights, prices, returns, _, _, rf = require_portfolio()
+bench_name, bench_prices, bench_returns = benchmark_picker_and_data()
 
 # ─── Fetch currency metadata for every holding ───────────────────────────────
 with st.spinner("Fetching currency metadata for holdings..."):

@@ -8,14 +8,15 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import factor_models as FM
-from data import FACTOR_PROXIES, fetch_prices, portfolio_returns, require_portfolio
+from data import benchmark_picker_and_data, FACTOR_PROXIES, fetch_prices, portfolio_returns, require_portfolio
 from theme import inject_css
 
 inject_css()
 st.title("Factor Models")
 st.caption("CAPM and custom multi-factor OLS with full regression statistics.")
 
-tickers, weights, prices, returns, bench_prices, bench_returns, rf = require_portfolio()
+tickers, weights, prices, returns, _, _, rf = require_portfolio()
+bench_name, bench_prices, bench_returns = benchmark_picker_and_data()
 port_ret = portfolio_returns(returns, weights)
 
 st.sidebar.header("Regression target")
@@ -32,7 +33,7 @@ tab_capm, tab_multi, tab_rolling = st.tabs(["CAPM", "Multi-factor", "Rolling alp
 
 # ─── CAPM ─────────────────────────────────────────────────────────────────────
 with tab_capm:
-    st.subheader(f"CAPM regression — {label} vs S&P 500")
+    st.subheader(f"CAPM regression — {label} vs {bench_name}")
     res = FM.capm(y_series, bench_returns, rf=rf)
     if "error" in res:
         st.error(res["error"])

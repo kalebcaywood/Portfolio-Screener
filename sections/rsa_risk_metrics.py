@@ -8,14 +8,15 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import risk as R
-from data import portfolio_returns, require_portfolio
+from data import benchmark_picker_and_data, portfolio_returns, require_portfolio
 from theme import inject_css
 
 inject_css()
 st.title("Risk Metrics")
 st.caption("Value-at-Risk, Conditional VaR, component risk contribution, diversification.")
 
-tickers, weights, prices, returns, bench_prices, bench_returns, rf = require_portfolio()
+tickers, weights, prices, returns, _, _, rf = require_portfolio()
+bench_name, bench_prices, bench_returns = benchmark_picker_and_data()
 port_ret = portfolio_returns(returns, weights)
 
 st.sidebar.header("Settings")
