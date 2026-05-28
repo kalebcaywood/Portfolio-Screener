@@ -10,6 +10,131 @@ BENCHMARK = "^GSPC"
 RISK_FREE_RATE = 0.04
 TRADING_DAYS = 252
 
+
+# ────────────────────────────────────────────────────────────────────────────
+# Major benchmark indices — pulled live from Yahoo Finance.
+# For MSCI indices (which aren't directly tradeable/quotable) we use the
+# iShares ETF that tracks them — these track within a few basis points after
+# fees and are what professional benchmarking platforms actually reference.
+# ────────────────────────────────────────────────────────────────────────────
+
+MAJOR_BENCHMARKS: dict[str, dict] = {
+    # ── US ─────────────────────────────────────────────────────────────────
+    "S&P 500": {
+        "ticker": "^GSPC", "category": "US", "asset_class": "Equity",
+        "description": "S&P 500 Index — US large-cap, 500 names (direct index quote)",
+    },
+    "S&P 500 (IVV ETF)": {
+        "ticker": "IVV", "category": "US", "asset_class": "Equity",
+        "description": "iShares Core S&P 500 ETF — investable proxy for the index",
+    },
+    "Nasdaq 100": {
+        "ticker": "QQQ", "category": "US", "asset_class": "Equity",
+        "description": "Invesco QQQ — top 100 non-financial Nasdaq names",
+    },
+    "Russell 2000": {
+        "ticker": "IWM", "category": "US", "asset_class": "Equity",
+        "description": "iShares Russell 2000 ETF — US small-cap",
+    },
+    "Dow Jones": {
+        "ticker": "^DJI", "category": "US", "asset_class": "Equity",
+        "description": "Dow Jones Industrial Average",
+    },
+
+    # ── Global (Developed + Emerging) ──────────────────────────────────────
+    "MSCI ACWI": {
+        "ticker": "ACWI", "category": "Global", "asset_class": "Equity",
+        "description": "iShares MSCI ACWI ETF — All Country World (developed + emerging, ~3,000 names)",
+    },
+    "MSCI World": {
+        "ticker": "URTH", "category": "Global", "asset_class": "Equity",
+        "description": "iShares MSCI World ETF — developed markets only (~1,500 names)",
+    },
+
+    # ── International (ex-US) ──────────────────────────────────────────────
+    "MSCI ACWI ex-US": {
+        "ticker": "ACWX", "category": "International", "asset_class": "Equity",
+        "description": "iShares MSCI ACWI ex-US ETF — global excluding the United States",
+    },
+    "MSCI EAFE": {
+        "ticker": "EFA", "category": "International", "asset_class": "Equity",
+        "description": "iShares MSCI EAFE ETF — developed markets ex-US & Canada",
+    },
+    "MSCI Europe": {
+        "ticker": "VGK", "category": "International", "asset_class": "Equity",
+        "description": "Vanguard FTSE Europe ETF — developed Europe",
+    },
+    "MSCI Japan": {
+        "ticker": "EWJ", "category": "International", "asset_class": "Equity",
+        "description": "iShares MSCI Japan ETF",
+    },
+
+    # ── Emerging ───────────────────────────────────────────────────────────
+    "MSCI EM": {
+        "ticker": "EEM", "category": "Emerging", "asset_class": "Equity",
+        "description": "iShares MSCI Emerging Markets ETF",
+    },
+    "MSCI China": {
+        "ticker": "MCHI", "category": "Emerging", "asset_class": "Equity",
+        "description": "iShares MSCI China ETF",
+    },
+    "MSCI India": {
+        "ticker": "INDA", "category": "Emerging", "asset_class": "Equity",
+        "description": "iShares MSCI India ETF",
+    },
+
+    # ── Fixed income (for completeness — bond benchmarks) ──────────────────
+    "US Aggregate Bond": {
+        "ticker": "AGG", "category": "Fixed Income", "asset_class": "Bond",
+        "description": "iShares Core US Aggregate Bond ETF",
+    },
+    "US 20+ Treasury": {
+        "ticker": "TLT", "category": "Fixed Income", "asset_class": "Bond",
+        "description": "iShares 20+ Year Treasury Bond ETF",
+    },
+    "EM Sovereign USD": {
+        "ticker": "EMB", "category": "Fixed Income", "asset_class": "Bond",
+        "description": "iShares JPMorgan USD Emerging Markets Bond ETF",
+    },
+
+    # ── Real assets ────────────────────────────────────────────────────────
+    "Gold": {
+        "ticker": "GLD", "category": "Real Assets", "asset_class": "Commodity",
+        "description": "SPDR Gold Shares",
+    },
+    "Global REITs": {
+        "ticker": "REET", "category": "Real Assets", "asset_class": "Real Estate",
+        "description": "iShares Global REIT ETF",
+    },
+}
+
+
+def benchmark_ticker(name: str) -> str:
+    """Return the Yahoo ticker for a benchmark name (or pass-through if already a ticker)."""
+    if name in MAJOR_BENCHMARKS:
+        return MAJOR_BENCHMARKS[name]["ticker"]
+    return name
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_benchmark_prices(names: tuple, period: str = "5y") -> pd.DataFrame:
+    """Fetch price series for one or more benchmarks by their friendly name.
+
+    Returns a wide DataFrame: index = dates, columns = benchmark names (not tickers).
+    Cached for 30 minutes — long enough to avoid hammering Yahoo, short enough
+    that intra-day moves are reflected after a refresh.
+    """
+    if not names:
+        return pd.DataFrame()
+    ticker_to_name = {}
+    for n in names:
+        t = MAJOR_BENCHMARKS.get(n, {}).get("ticker", n)
+        ticker_to_name[t] = n
+    prices = fetch_prices(tuple(ticker_to_name.keys()), period=period)
+    if prices.empty:
+        return prices
+    return prices.rename(columns=ticker_to_name)
+
 # ────────────────────────────────────────────────────────────────────────────
 # Currency, FX-pair, and interest-rate catalogs
 # ────────────────────────────────────────────────────────────────────────────
