@@ -232,7 +232,32 @@ hr {
     border-top-width: 1px;
 }
 
-/* Tabs — orange active state */
+/* Top navigation bar (st.navigation position="top") — center the tabs */
+[data-testid="stTopNav"],
+[data-testid="stNavigation"] [role="navigation"],
+[data-testid="stHeader"] nav,
+header nav[aria-label*="Main"] {
+    display: flex !important;
+    justify-content: center !important;
+}
+[data-testid="stTopNav"] > div,
+[data-testid="stTopNav"] ul,
+header nav ul {
+    margin: 0 auto !important;
+    justify-content: center !important;
+}
+/* Style the top-nav links to match the orange brand */
+[data-testid="stTopNav"] a, header nav a {
+    font-weight: 500;
+    color: #1a1a1a;
+}
+[data-testid="stTopNav"] a[aria-current="page"],
+header nav a[aria-current="page"] {
+    color: #FF8200 !important;
+    font-weight: 700 !important;
+}
+
+/* Tabs — orange active state (for in-page st.tabs, not top nav) */
 .stTabs [data-baseweb="tab-list"] {
     gap: 4px;
     border-bottom: 2px solid #e5e5e5;
@@ -313,14 +338,15 @@ a:hover {
     background-color: #FF8200 !important;
 }
 
-/* UT brand header strip — used at the top of the Home page */
+/* UT brand header strip — top of every page (above the top-bar nav) */
 .ut-header {
     display: flex;
     align-items: center;
     gap: 20px;
-    padding: 18px 0 16px 0;
+    padding: 12px 0 12px 0;
     border-bottom: 3px solid #FF8200;
-    margin-bottom: 24px;
+    margin-bottom: 8px;
+    margin-top: -1rem;
 }
 .ut-logo-wrap {
     display: flex;

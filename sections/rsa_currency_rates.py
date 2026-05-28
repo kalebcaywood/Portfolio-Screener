@@ -9,10 +9,9 @@ import streamlit as st
 
 from data import (BOND_ETFS, CURRENCY_TO_FX, FX_PAIRS, RATE_INDICATORS,
                    fetch_currency_map, fetch_prices, require_portfolio)
-from theme import inject_css, ut_sidebar_brand
+from theme import inject_css
 
 inject_css()
-ut_sidebar_brand()
 st.title("Currency Risk & Interest Rates")
 st.caption("Currency exposure of your holdings, FX-impact attribution on returns, and global rate / FX dashboards.")
 

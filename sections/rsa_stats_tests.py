@@ -10,10 +10,9 @@ from scipy import stats as sps
 
 import stats_tests as ST
 from data import portfolio_returns, require_portfolio
-from theme import inject_css, ut_sidebar_brand
+from theme import inject_css
 
 inject_css()
-ut_sidebar_brand()
 st.title("Statistical Tests")
 st.caption("Distribution, stationarity, autocorrelation, heteroscedasticity, and random-walk diagnostics.")
 

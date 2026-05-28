@@ -3,11 +3,9 @@ from __future__ import annotations
 
 import streamlit as st
 
-from theme import inject_css, ut_sidebar_brand
+from theme import inject_css
 
 inject_css()
-ut_sidebar_brand()
-
 st.title("Credit Analyzer")
 st.caption("Fixed-income and credit analytics — coming soon.")
 

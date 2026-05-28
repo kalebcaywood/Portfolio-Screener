@@ -1,42 +1,33 @@
-"""Quantitative Portfolio Analytics — entry point with sectioned top-bar navigation.
+"""Quantitative Portfolio Analytics — entry point with UT brand header + top-bar nav.
 
-The five top-level sections are:
-  1. App                   — landing page / portfolio builder
-  2. Fund Holdings         — Bloomberg multi-fund book analyzer
-  3. Equity Screener       — per-ticker fundamental + technical screener
-  4. Return Stream Analyzer — performance, risk, factor, optimization, MC, stress, etc.
-  5. Credit Analyzer       — fixed-income / credit work (under construction)
-
-Each section's pages live under sections/ and are wired into st.navigation
-with `position="top"` so the headers render as a horizontal bar at the top.
+Top-level sections:
+  1. Portfolio Analyzer       — holdings-based workbench (Home + 11 analytics pages)
+  2. Fund Holdings            — Bloomberg multi-fund book analyzer
+  3. Equity Screener          — per-ticker fundamental + technical screener
+  4. Return Stream Analyzer   — pure-returns workbench (to be built)
+  5. Credit Analyzer          — fixed-income / credit analytics (to be built)
 """
 from __future__ import annotations
 
 import streamlit as st
 
-from theme import inject_css
+from theme import inject_css, ut_header
 
-# ─── Page config — owned by the entry point only ────────────────────────────
+# ─── Page config — single source of truth ────────────────────────────────────
 st.set_page_config(
     page_title="UT Portfolio Analytics",
     layout="wide",
-    initial_sidebar_state="auto",
+    initial_sidebar_state="auto",  # user-collapsible
 )
 inject_css()
 
+# ─── UT brand header at the top of every page ───────────────────────────────
+ut_header("Quantitative Portfolio Analytics", "University of Tennessee")
 
-# ─── Section structure ──────────────────────────────────────────────────────
+# ─── Sections ────────────────────────────────────────────────────────────────
 sections = {
-    "App": [
-        st.Page("sections/home.py", title="Home", default=True),
-    ],
-    "Fund Holdings": [
-        st.Page("sections/fund_holdings.py", title="Holdings Analyzer"),
-    ],
-    "Equity Screener": [
-        st.Page("sections/screener.py", title="Screener"),
-    ],
-    "Return Stream Analyzer": [
+    "Portfolio Analyzer": [
+        st.Page("sections/home.py",               title="Home", default=True),
         st.Page("sections/rsa_performance.py",    title="Performance"),
         st.Page("sections/rsa_risk_metrics.py",   title="Risk Metrics"),
         st.Page("sections/rsa_stats_tests.py",    title="Statistical Tests"),
@@ -49,11 +40,19 @@ sections = {
         st.Page("sections/rsa_risk_decomp.py",    title="Risk Decomposition"),
         st.Page("sections/rsa_pacing_reup.py",    title="Pacing & Reup"),
     ],
+    "Fund Holdings": [
+        st.Page("sections/fund_holdings.py", title="Holdings Analyzer"),
+    ],
+    "Equity Screener": [
+        st.Page("sections/screener.py", title="Screener"),
+    ],
+    "Return Stream Analyzer": [
+        st.Page("sections/rsa_placeholder.py", title="Coming Soon"),
+    ],
     "Credit Analyzer": [
         st.Page("sections/credit_placeholder.py", title="Coming Soon"),
     ],
 }
 
-# Render top-bar navigation
 pg = st.navigation(sections, position="top")
 pg.run()

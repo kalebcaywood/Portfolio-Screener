@@ -9,10 +9,9 @@ import streamlit as st
 
 import monte_carlo as MC
 from data import require_portfolio
-from theme import inject_css, ut_sidebar_brand
+from theme import inject_css
 
 inject_css()
-ut_sidebar_brand()
 st.title("Monte Carlo Simulation")
 st.caption("Project portfolio paths via multivariate-normal or historical bootstrap simulation.")
 

@@ -9,10 +9,9 @@ import streamlit as st
 
 import risk as R
 from data import portfolio_returns, require_portfolio
-from theme import inject_css, ut_sidebar_brand
+from theme import inject_css
 
 inject_css()
-ut_sidebar_brand()
 st.title("Risk Metrics")
 st.caption("Value-at-Risk, Conditional VaR, component risk contribution, diversification.")
 

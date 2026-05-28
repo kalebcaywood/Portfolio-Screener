@@ -8,13 +8,11 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from data import format_market_cap
-from theme import inject_css, ut_sidebar_brand
+from theme import inject_css
 from screener import compute_portfolio, fetch_history, returns_from_prices
 from scoring import composite_score
 
 inject_css()
-ut_sidebar_brand()
-
 PCT_COLS = {"roe", "roa", "gross_margin", "op_margin", "net_margin", "rev_growth",
             "earnings_growth", "eps_growth_q", "div_yield", "payout_ratio",
             "ret_1m", "ret_3m", "ret_6m", "ret_1y", "ret_ytd", "volatility",

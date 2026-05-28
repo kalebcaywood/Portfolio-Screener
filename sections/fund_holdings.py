@@ -14,10 +14,9 @@ import streamlit as st
 
 import bloomberg as BB
 from data import fetch_sector
-from theme import COLORWAY, inject_css, ut_sidebar_brand
+from theme import COLORWAY, inject_css
 
 inject_css()
-ut_sidebar_brand()
 st.title("Fund Holdings Analyzer")
 st.caption(
     "Upload a Bloomberg-format multi-fund holdings file (Fund, Ticker, Quantity, "

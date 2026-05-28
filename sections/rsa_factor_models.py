@@ -9,10 +9,9 @@ import streamlit as st
 
 import factor_models as FM
 from data import FACTOR_PROXIES, fetch_prices, portfolio_returns, require_portfolio
-from theme import inject_css, ut_sidebar_brand
+from theme import inject_css
 
 inject_css()
-ut_sidebar_brand()
 st.title("Factor Models")
 st.caption("CAPM and custom multi-factor OLS with full regression statistics.")
 
