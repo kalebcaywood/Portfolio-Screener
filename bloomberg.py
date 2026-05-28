@@ -250,3 +250,83 @@ def load_bloomberg_csv(file_or_buffer) -> dict:
 
     out["df"] = rec.reset_index(drop=True)
     return out
+
+
+def looks_like_bloomberg(df: pd.DataFrame) -> bool:
+    """Heuristic: does this raw DataFrame look like a Bloomberg multi-fund file?
+
+    True if there's a market-value column AND the ticker column contains
+    space-separated Bloomberg identifiers (e.g. 'AAPL US').
+    """
+    if df is None or df.empty:
+        return False
+    cols = list(df.columns)
+    ticker_col = _find_col(cols, ["ticker", "security", "symbol", "identifier", "bloomberg"])
+    mv_col = _find_col(cols, ["marketvalue", "value", "mv", "marketval", "notional",
+                               "exposure", "mktval"])
+    if ticker_col is None:
+        return False
+    sample = df[ticker_col].astype(str).head(50)
+    # Bloomberg identifiers are "SYMBOL EXCH" — a space with a known exchange code
+    space_with_code = sample.apply(
+        lambda s: len(s.split()) >= 2 and (
+            s.split()[-1] in EXCHANGE_MAP or s.split()[-1] in _SECURITY_TYPES
+        )
+    )
+    has_bb_tickers = space_with_code.mean() > 0.3
+    return bool(mv_col is not None and has_bb_tickers)
+
+
+def aggregate_to_portfolio(df: pd.DataFrame, top_n: int | None = None) -> tuple[pd.DataFrame, dict]:
+    """Aggregate a parsed holdings df (possibly many funds) into ONE combined
+    portfolio keyed by Yahoo ticker, with weights computed from Market Value.
+
+    Returns (portfolio_df, meta) where portfolio_df has columns
+    [ticker, description, weight, market_value] and meta carries coverage info.
+    """
+    work = df.copy()
+    if "market_value" not in work.columns:
+        raise ValueError("aggregate_to_portfolio requires a market_value column.")
+    # Only equity-like rows with a resolved Yahoo ticker
+    work = work[work["yahoo"].astype(str).str.strip() != ""]
+
+    agg = (work.groupby("yahoo", as_index=False)
+                .agg(market_value=("market_value", "sum"),
+                     symbol=("symbol", "first"),
+                     country=("country", "first"),
+                     region=("region", "first"),
+                     raw_ticker=("raw_ticker", "first"),
+                     n_funds=("fund", "nunique")))
+    agg = agg[agg["market_value"] > 0]
+    agg = agg.sort_values("market_value", ascending=False).reset_index(drop=True)
+
+    total_mv = float(agg["market_value"].sum())
+    n_total = len(agg)
+    coverage = 1.0
+
+    if top_n is not None and n_total > top_n:
+        kept = agg.head(top_n).copy()
+        coverage = float(kept["market_value"].sum() / total_mv) if total_mv else 0.0
+        agg = kept
+
+    agg["weight"] = agg["market_value"] / agg["market_value"].sum()
+    # Build a readable description
+    def _describe(row):
+        base = f"{row['symbol']} · {row['country']}"
+        if row["n_funds"] > 1:
+            base += f" · in {int(row['n_funds'])} funds"
+        return base
+    agg["description"] = agg.apply(_describe, axis=1)
+
+    portfolio = agg[["yahoo", "description", "weight", "market_value"]].rename(
+        columns={"yahoo": "ticker"}
+    )
+    meta = {
+        "n_total_unique": n_total,
+        "n_kept": len(portfolio),
+        "coverage": coverage,
+        "total_mv": total_mv,
+        "n_funds": int(work["fund"].nunique()),
+        "n_positions": len(work),
+    }
+    return portfolio.reset_index(drop=True), meta

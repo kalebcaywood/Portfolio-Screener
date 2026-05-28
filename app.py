@@ -8,6 +8,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+import bloomberg as BB
 from data import BENCHMARK, RISK_FREE_RATE, compute_returns, fetch_prices
 from portfolio_input import (clean_ticker, df_to_weight_series, is_valid_ticker,
                               normalize_weights, parse_csv, validate_price_data)
@@ -299,7 +300,10 @@ else:  # CSV upload
         "Ticker: `ticker`, `symbol`, `stock`, `asset`. "
         "Description: `description`, `name`, `company`. "
         "Weight: `weight`, `allocation`, `%`, `pct`. "
-        "Shares: `shares`, `qty`, `quantity`."
+        "Shares: `shares`, `qty`, `quantity`. "
+        "**Bloomberg multi-fund files** (Fund, Ticker like `AAPL US`, Quantity, "
+        "Market Value) are auto-detected — tickers are converted, funds combined, "
+        "and weights computed from Market Value."
     )
     with st.expander("Example CSV formats"):
         st.code(
@@ -333,28 +337,94 @@ else:  # CSV upload
         )
 
     if uploaded is not None:
-        parsed = parse_csv(uploaded)
-        errors.extend(parsed["errors"])
-        warnings_list.extend(parsed["warnings"])
-        captured_df = parsed["df"]
-        input_mode = parsed["mode"]
-        if captured_df is not None and not captured_df.empty:
-            st.subheader("Parsed CSV preview")
+        # Peek at the raw file to detect Bloomberg multi-fund format
+        try:
+            uploaded.seek(0)
+            _peek = pd.read_csv(uploaded, nrows=200)
+            uploaded.seek(0)
+        except Exception:
+            _peek = None
 
-            # Per-row validation indicators
-            preview = captured_df.copy()
-            preview.insert(0, "valid",
-                            preview["ticker"].apply(lambda t: "Yes" if is_valid_ticker(t) else "No"))
-            if "weight" in preview.columns:
-                preview["weight"] = preview["weight"].apply(
-                    lambda v: f"{v:+.4f}" if pd.notna(v) and v != 0 else (f"{v:.4f}" if pd.notna(v) else "—")
+        if _peek is not None and BB.looks_like_bloomberg(_peek):
+            # ── Bloomberg multi-fund path ──────────────────────────────────
+            st.success(
+                "Detected a **Bloomberg multi-fund holdings file**. Converting tickers "
+                "to Yahoo format, aggregating funds into one combined portfolio, and "
+                "computing weights from Market Value."
+            )
+            bb = BB.load_bloomberg_csv(uploaded)
+            errors.extend(bb["errors"])
+            warnings_list.extend(bb["warnings"])
+
+            if bb["df"] is not None and not bb["df"].empty:
+                holdings = bb["df"]
+                n_unique = holdings["yahoo"].nunique()
+
+                st.markdown("##### Combined-portfolio settings")
+                cset1, cset2 = st.columns(2)
+                with cset1:
+                    top_n = st.number_input(
+                        "Analyze top N holdings by market value",
+                        min_value=10,
+                        max_value=int(min(500, n_unique)),
+                        value=int(min(75, n_unique)),
+                        step=5,
+                        help=(
+                            f"This book has {n_unique:,} unique tickers across "
+                            f"{holdings['fund'].nunique()} funds. Live price fetching "
+                            "is limited to the largest N by value (the rest are a long "
+                            "tail of tiny positions). For full geographic / concentration "
+                            "views of ALL holdings, use the Fund Holdings page."
+                        ),
+                    )
+                with cset2:
+                    st.metric("Unique tickers in file", f"{n_unique:,}")
+
+                portfolio_df_bb, meta = BB.aggregate_to_portfolio(holdings, top_n=int(top_n))
+                captured_df = portfolio_df_bb[["ticker", "description", "weight"]].copy()
+                input_mode = "weight"
+
+                # Coverage info
+                mcov = st.columns(4)
+                mcov[0].metric("Funds combined", meta["n_funds"])
+                mcov[1].metric("Total positions", f"{meta['n_positions']:,}")
+                mcov[2].metric("Holdings analyzed", f"{meta['n_kept']:,}")
+                mcov[3].metric("Value coverage", f"{meta['coverage']:.1%}",
+                                help="Share of total book market value represented by the top N")
+
+                st.caption(
+                    f"Combined book market value: **${meta['total_mv']:,.0f}**. "
+                    f"The top **{meta['n_kept']}** holdings cover **{meta['coverage']:.1%}** "
+                    "of that value and will be re-normalized to 100% for the analytics pages."
                 )
-            st.dataframe(preview, hide_index=True, width="stretch")
 
-            # Live exposure preview
-            live = live_exposure(captured_df)
-            if live is not None:
-                render_exposure_preview(live, title="Live exposure preview (before normalization)")
+                st.subheader("Combined portfolio preview (top holdings by weight)")
+                preview = portfolio_df_bb.head(top_n).copy()
+                preview["weight"] = preview["weight"].apply(lambda v: f"{v:.3%}")
+                preview["market_value"] = preview["market_value"].apply(lambda v: f"${v:,.0f}")
+                preview.columns = ["Ticker", "Description", "Weight", "Market value"]
+                st.dataframe(preview, hide_index=True, width="stretch")
+        else:
+            # ── Standard portfolio CSV path ────────────────────────────────
+            parsed = parse_csv(uploaded)
+            errors.extend(parsed["errors"])
+            warnings_list.extend(parsed["warnings"])
+            captured_df = parsed["df"]
+            input_mode = parsed["mode"]
+            if captured_df is not None and not captured_df.empty:
+                st.subheader("Parsed CSV preview")
+                preview = captured_df.copy()
+                preview.insert(0, "valid",
+                                preview["ticker"].apply(lambda t: "Yes" if is_valid_ticker(t) else "No"))
+                if "weight" in preview.columns:
+                    preview["weight"] = preview["weight"].apply(
+                        lambda v: f"{v:+.4f}" if pd.notna(v) and v != 0 else (f"{v:.4f}" if pd.notna(v) else "—")
+                    )
+                st.dataframe(preview, hide_index=True, width="stretch")
+
+                live = live_exposure(captured_df)
+                if live is not None:
+                    render_exposure_preview(live, title="Live exposure preview (before normalization)")
 
 # ─── Settings sidebar ────────────────────────────────────────────────────────
 st.sidebar.header("Settings")
