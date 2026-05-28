@@ -48,7 +48,9 @@ sections = {
         st.Page("sections/screener.py", title="Screener"),
     ],
     "Return Stream Analyzer": [
-        st.Page("sections/rsa_placeholder.py", title="Coming Soon"),
+        st.Page("sections/rs_home.py",        title="Home", url_path="rs_home"),
+        st.Page("sections/rs_performance.py", title="Performance & Risk"),
+        st.Page("sections/rs_comparison.py",  title="Stream Comparison"),
     ],
     "Credit Analyzer": [
         st.Page("sections/credit_placeholder.py", title="Coming Soon"),
