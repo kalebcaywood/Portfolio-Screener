@@ -232,29 +232,79 @@ hr {
     border-top-width: 1px;
 }
 
-/* Top navigation bar (st.navigation position="top") — center the tabs */
-[data-testid="stTopNav"],
-[data-testid="stNavigation"] [role="navigation"],
-[data-testid="stHeader"] nav,
-header nav[aria-label*="Main"] {
+/* ──────────────────────────────────────────────────────────────────────────
+   Top navigation (st.navigation position="top") — center the tabs.
+   Streamlit doesn't expose a single canonical selector for the top nav;
+   different versions/themes use different testids. Cast a wide net.
+   ────────────────────────────────────────────────────────────────────────── */
+[data-testid="stHeader"],
+header[data-testid="stHeader"],
+header.stAppHeader,
+[data-testid="stMainBlockContainer"] > div:first-child > [data-testid="stHeader"] {
     display: flex !important;
     justify-content: center !important;
+    align-items: center !important;
 }
-[data-testid="stTopNav"] > div,
-[data-testid="stTopNav"] ul,
-header nav ul {
-    margin: 0 auto !important;
+
+/* The nav container itself */
+[data-testid="stTopNav"],
+[data-testid="stTopNavigation"],
+[data-testid="stNavigation"],
+[data-testid="stHeader"] nav,
+[data-testid="stHeader"] [role="navigation"],
+[data-testid="stHeader"] [role="menubar"],
+[data-testid="stHeader"] [role="tablist"],
+header nav,
+header [role="navigation"],
+header [role="menubar"],
+header [role="tablist"] {
+    display: flex !important;
+    flex: 1 1 auto !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
     justify-content: center !important;
+    width: 100% !important;
 }
-/* Style the top-nav links to match the orange brand */
-[data-testid="stTopNav"] a, header nav a {
+
+/* Force the inner list of items to be centered */
+[data-testid="stTopNav"] > div,
+[data-testid="stTopNav"] > ul,
+[data-testid="stHeader"] nav > div,
+[data-testid="stHeader"] nav > ul,
+[data-testid="stHeader"] [role="navigation"] > div,
+[data-testid="stHeader"] [role="tablist"] > div,
+header nav > div,
+header nav > ul,
+header [role="tablist"] > div {
+    display: flex !important;
+    justify-content: center !important;
+    margin: 0 auto !important;
+    flex-grow: 1 !important;
+}
+
+/* Section headers in the top nav (Streamlit groups pages under headers) */
+[data-testid="stTopNav"] [data-testid*="navSectionHeader"],
+[data-testid="stHeader"] [data-testid*="sectionHeader"] {
+    text-align: center;
+}
+
+/* Style the active item in Tennessee Orange */
+[data-testid="stTopNav"] a, header nav a, header [role="tab"] {
     font-weight: 500;
     color: #1a1a1a;
 }
 [data-testid="stTopNav"] a[aria-current="page"],
-header nav a[aria-current="page"] {
+header nav a[aria-current="page"],
+header [role="tab"][aria-selected="true"] {
     color: #FF8200 !important;
     font-weight: 700 !important;
+}
+
+/* If the toolbar (right-side menu/decoration area) is pushing nav left,
+   shrink it so the nav has room to center. */
+[data-testid="stHeader"] > div:last-child:not([data-testid*="nav" i]),
+[data-testid="stToolbar"] {
+    flex: 0 0 auto !important;
 }
 
 /* Tabs — orange active state (for in-page st.tabs, not top nav) */
