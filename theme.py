@@ -2,12 +2,120 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 from pathlib import Path
 
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
 import streamlit as st
+
+
+# SHA-256 of the access password. Plaintext is intentionally not in source.
+# To change the password, compute the new hash with:
+#   python -c "import hashlib; print(hashlib.sha256(b'<new_pw>').hexdigest())"
+_PASSWORD_HASH = "d54123de468bd42ea00dafbd777f85fe5fa1ff6404d9838c007953c25c92a1c5"
+
+
+def require_password() -> None:
+    """Show a password gate; halt the script if the user isn't authenticated.
+
+    Call this once at the very top of the entry script, after st.set_page_config.
+    Once authenticated, st.session_state['authenticated'] = True persists for
+    the duration of the browser session — every page in the multipage app
+    reads through this same flag.
+    """
+    if st.session_state.get("authenticated", False):
+        return
+
+    # Minimal CSS for a clean centered gate
+    st.markdown(
+        """
+<style>
+body { background: #f7f7f5; }
+.gate-wrap {
+    max-width: 380px;
+    margin: 12vh auto 0 auto;
+    padding: 32px 32px 28px 32px;
+    background: white;
+    border: 1px solid #e5e5e5;
+    border-radius: 8px;
+    border-top: 4px solid #FF8200;
+}
+.gate-mark {
+    background: #FF8200;
+    color: white;
+    font-weight: 800;
+    font-size: 22px;
+    padding: 10px 16px;
+    border-radius: 4px;
+    display: inline-block;
+    letter-spacing: 0.05em;
+    line-height: 1;
+}
+.gate-title {
+    font-weight: 700;
+    font-size: 22px;
+    color: #1a1a1a;
+    letter-spacing: -0.015em;
+    margin: 18px 0 4px 0;
+}
+.gate-supra {
+    color: #FF8200;
+    font-weight: 700;
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+}
+.gate-caption {
+    color: #58595B;
+    font-size: 13px;
+    margin: 4px 0 18px 0;
+}
+</style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Render gate inside a centered card
+    st.markdown(
+        """
+<div class="gate-wrap">
+  <div class="gate-mark">UT</div>
+  <div class="gate-supra" style="margin-top:14px;">University of Tennessee</div>
+  <div class="gate-title">Quantitative Portfolio Analytics</div>
+  <div class="gate-caption">Access required. Enter password to continue.</div>
+</div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Centered input via columns
+    c1, c2, c3 = st.columns([1, 1.2, 1])
+    with c2:
+        with st.form("auth_form", clear_on_submit=False, border=False):
+            pw = st.text_input("Password", type="password", label_visibility="collapsed",
+                                 placeholder="Password")
+            submitted = st.form_submit_button("Sign in", type="primary",
+                                                  width="stretch")
+        if submitted:
+            attempt = hashlib.sha256(pw.encode("utf-8")).hexdigest()
+            if attempt == _PASSWORD_HASH:
+                st.session_state["authenticated"] = True
+                st.rerun()
+            else:
+                st.error("Incorrect password.")
+
+    st.stop()
+
+
+def render_logout_button() -> None:
+    """Optional sidebar logout button — clears auth so user is re-prompted."""
+    if st.session_state.get("authenticated", False):
+        with st.sidebar:
+            if st.button("Sign out", type="secondary", width="stretch"):
+                st.session_state["authenticated"] = False
+                st.rerun()
 
 # Path to the Power T logo. We search for any common image file in assets/
 # and pick the first match. Falls back to a CSS-only "UT" mark if none found.

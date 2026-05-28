@@ -12,7 +12,7 @@ from __future__ import annotations
 import streamlit as st
 import streamlit.components.v1 as components
 
-from theme import inject_css, ut_header
+from theme import inject_css, render_logout_button, require_password, ut_header
 
 # ─── Page config — single source of truth ────────────────────────────────────
 st.set_page_config(
@@ -20,7 +20,15 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="auto",  # user-collapsible
 )
+
+# ─── Password gate — runs BEFORE any other UI rendering ────────────────────
+# If the user isn't authenticated, this halts the script and shows the gate.
+require_password()
+
 inject_css()
+
+# Optional sign-out link in the sidebar (always shown post-auth)
+render_logout_button()
 
 # ─── UT brand header at the top of every page ───────────────────────────────
 ut_header("Quantitative Portfolio Analytics", "University of Tennessee")
