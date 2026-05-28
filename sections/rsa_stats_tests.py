@@ -12,7 +12,6 @@ import stats_tests as ST
 from data import portfolio_returns, require_portfolio
 from theme import inject_css, ut_sidebar_brand
 
-st.set_page_config(page_title="Statistical Tests", layout="wide")
 inject_css()
 ut_sidebar_brand()
 st.title("Statistical Tests")

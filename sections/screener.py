@@ -12,7 +12,6 @@ from theme import inject_css, ut_sidebar_brand
 from screener import compute_portfolio, fetch_history, returns_from_prices
 from scoring import composite_score
 
-st.set_page_config(page_title="Screener", layout="wide")
 inject_css()
 ut_sidebar_brand()
 

@@ -11,7 +11,6 @@ import factor_models as FM
 from data import FACTOR_PROXIES, fetch_prices, portfolio_returns, require_portfolio
 from theme import inject_css, ut_sidebar_brand
 
-st.set_page_config(page_title="Factor Models", layout="wide")
 inject_css()
 ut_sidebar_brand()
 st.title("Factor Models")

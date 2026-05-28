@@ -12,7 +12,6 @@ from theme import inject_css, ut_sidebar_brand
 from scipy.cluster.hierarchy import linkage, fcluster
 from scipy.spatial.distance import squareform
 
-st.set_page_config(page_title="Correlation", layout="wide")
 inject_css()
 ut_sidebar_brand()
 st.title("Correlation & Co-movement Analysis")

@@ -11,7 +11,6 @@ from data import (BOND_ETFS, CURRENCY_TO_FX, FX_PAIRS, RATE_INDICATORS,
                    fetch_currency_map, fetch_prices, require_portfolio)
 from theme import inject_css, ut_sidebar_brand
 
-st.set_page_config(page_title="Currency & Rates", layout="wide")
 inject_css()
 ut_sidebar_brand()
 st.title("Currency Risk & Interest Rates")

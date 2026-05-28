@@ -16,7 +16,6 @@ import bloomberg as BB
 from data import fetch_sector
 from theme import COLORWAY, inject_css, ut_sidebar_brand
 
-st.set_page_config(page_title="Fund Holdings", layout="wide")
 inject_css()
 ut_sidebar_brand()
 st.title("Fund Holdings Analyzer")
