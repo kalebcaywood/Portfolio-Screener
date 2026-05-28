@@ -262,16 +262,30 @@ def compute_metrics(symbol: str, bench_returns: pd.Series | None = None) -> dict
     return m
 
 
-def compute_portfolio(symbols: list[str], progress_callback=None) -> pd.DataFrame:
+def compute_portfolio(symbols: list[str], progress_callback=None,
+                       max_workers: int = 8) -> pd.DataFrame:
+    """Compute metrics for a list of tickers in parallel.
+
+    Each ticker's three yfinance calls (info, history, financials) run inside
+    a worker thread; threads share Streamlit's cache so duplicate work is
+    eliminated. Order of the input list is preserved in the output DataFrame.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     bench_hist = fetch_history(BENCHMARK, "2y")
     bench_returns = returns_from_prices(bench_hist["Close"]) if not bench_hist.empty else None
 
-    rows = []
-    for i, sym in enumerate(symbols):
-        if progress_callback:
-            progress_callback(i, len(symbols), sym)
-        try:
-            rows.append(compute_metrics(sym, bench_returns))
-        except Exception as e:
-            rows.append({"ticker": sym, "error": str(e)})
-    return pd.DataFrame(rows)
+    results: dict[str, dict] = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as exe:
+        futures = {exe.submit(compute_metrics, s, bench_returns): s for s in symbols}
+        done = 0
+        for future in as_completed(futures):
+            sym = futures[future]
+            try:
+                results[sym] = future.result()
+            except Exception as e:
+                results[sym] = {"ticker": sym, "error": str(e)}
+            done += 1
+            if progress_callback:
+                progress_callback(done - 1, len(symbols), sym)
+    return pd.DataFrame([results[s] for s in symbols])
