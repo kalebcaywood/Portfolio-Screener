@@ -295,9 +295,24 @@ with tab_sector:
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_holdings:
     st.subheader(f"Top holdings — {scope_label}")
+    st.caption(
+        "Each row is one **unique Yahoo ticker** — duplicates from different "
+        "Bloomberg long/short forms (e.g. `NVDA`, `NVDA US`, `NVDA US Equity`) "
+        "and across multiple funds are combined into a single line with summed value."
+    )
 
-    holdings = (df.groupby(["yahoo", "raw_ticker", "country", "region"])["market_value"]
-                  .sum().sort_values(ascending=False).reset_index())
+    # Group ONLY by the canonical Yahoo ticker. Aggregate everything else:
+    # take the first country/region (deterministic since yahoo → country),
+    # sum market value, count distinct source funds and Bloomberg forms.
+    holdings = (df.groupby("yahoo", as_index=False)
+                  .agg(country=("country", "first"),
+                        region=("region", "first"),
+                        market_value=("market_value", "sum"),
+                        n_funds=("fund", "nunique"),
+                        n_forms=("raw_ticker", "nunique"),
+                        n_positions=("fund", "size"))
+                  .sort_values("market_value", ascending=False)
+                  .reset_index(drop=True))
     holdings["pct"] = holdings["market_value"] / total_mv
     holdings["cumulative_pct"] = holdings["pct"].cumsum()
 
@@ -308,8 +323,8 @@ with tab_holdings:
     disp["market_value"] = disp["market_value"].apply(lambda x: f"${x:,.0f}")
     disp["pct"] = disp["pct"].apply(lambda x: f"{x:.2%}")
     disp["cumulative_pct"] = disp["cumulative_pct"].apply(lambda x: f"{x:.1%}")
-    disp.columns = ["Yahoo ticker", "Bloomberg ticker", "Country", "Region",
-                     "Market value", "% of book", "Cumulative %"]
+    disp.columns = ["Ticker", "Country", "Region", "Market value",
+                     "# funds", "# Bloomberg forms", "# rows", "% of book", "Cumulative %"]
     st.dataframe(disp, hide_index=True, width="stretch")
 
     # Cumulative concentration curve
