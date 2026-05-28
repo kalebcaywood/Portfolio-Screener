@@ -348,9 +348,8 @@ else:  # CSV upload
         if _peek is not None and BB.looks_like_bloomberg(_peek):
             # ── Bloomberg multi-fund path ──────────────────────────────────
             st.success(
-                "Detected a **Bloomberg multi-fund holdings file**. Converting tickers "
-                "to Yahoo format, aggregating funds into one combined portfolio, and "
-                "computing weights from Market Value."
+                "Detected a **Bloomberg multi-fund holdings file**. Combining every "
+                "ticker across all funds, summing market values, and computing weights."
             )
             bb = BB.load_bloomberg_csv(uploaded)
             errors.extend(bb["errors"])
@@ -358,52 +357,67 @@ else:  # CSV upload
 
             if bb["df"] is not None and not bb["df"].empty:
                 holdings = bb["df"]
-                n_unique = holdings["yahoo"].nunique()
 
-                st.markdown("##### Combined-portfolio settings")
-                cset1, cset2 = st.columns(2)
-                with cset1:
-                    top_n = st.number_input(
-                        "Analyze top N holdings by market value",
-                        min_value=10,
-                        max_value=int(min(500, n_unique)),
-                        value=int(min(75, n_unique)),
-                        step=5,
-                        help=(
-                            f"This book has {n_unique:,} unique tickers across "
-                            f"{holdings['fund'].nunique()} funds. Live price fetching "
-                            "is limited to the largest N by value (the rest are a long "
-                            "tail of tiny positions). For full geographic / concentration "
-                            "views of ALL holdings, use the Fund Holdings page."
-                        ),
-                    )
-                with cset2:
-                    st.metric("Unique tickers in file", f"{n_unique:,}")
+                # ─── FULL combined portfolio (no cap) ─────────────────────
+                full_portfolio, full_meta = BB.aggregate_to_portfolio(holdings, top_n=None)
+                n_unique = full_meta["n_total_unique"]
 
-                portfolio_df_bb, meta = BB.aggregate_to_portfolio(holdings, top_n=int(top_n))
-                captured_df = portfolio_df_bb[["ticker", "description", "weight"]].copy()
-                input_mode = "weight"
-
-                # Coverage info
                 mcov = st.columns(4)
-                mcov[0].metric("Funds combined", meta["n_funds"])
-                mcov[1].metric("Total positions", f"{meta['n_positions']:,}")
-                mcov[2].metric("Holdings analyzed", f"{meta['n_kept']:,}")
-                mcov[3].metric("Value coverage", f"{meta['coverage']:.1%}",
-                                help="Share of total book market value represented by the top N")
+                mcov[0].metric("Funds combined", full_meta["n_funds"])
+                mcov[1].metric("Total positions", f"{full_meta['n_positions']:,}")
+                mcov[2].metric("Unique tickers", f"{n_unique:,}")
+                mcov[3].metric("Total market value", f"${full_meta['total_mv']:,.0f}")
 
+                st.markdown("##### True combined allocation")
                 st.caption(
-                    f"Combined book market value: **${meta['total_mv']:,.0f}**. "
-                    f"The top **{meta['n_kept']}** holdings cover **{meta['coverage']:.1%}** "
-                    "of that value and will be re-normalized to 100% for the analytics pages."
+                    f"Every unique ticker from your {full_meta['n_funds']} funds, with "
+                    "market values summed across funds and weights computed from the totals. "
+                    "Sorted by weight."
                 )
 
-                st.subheader("Combined portfolio preview (top holdings by weight)")
-                preview = portfolio_df_bb.head(top_n).copy()
-                preview["weight"] = preview["weight"].apply(lambda v: f"{v:.3%}")
-                preview["market_value"] = preview["market_value"].apply(lambda v: f"${v:,.0f}")
-                preview.columns = ["Ticker", "Description", "Weight", "Market value"]
-                st.dataframe(preview, hide_index=True, width="stretch")
+                # Show every aggregated holding
+                disp_full = full_portfolio.copy()
+                disp_full["weight"] = disp_full["weight"].apply(lambda v: f"{v:.4%}")
+                disp_full["market_value"] = disp_full["market_value"].apply(lambda v: f"${v:,.2f}")
+                disp_full.columns = ["Ticker", "Description", "Weight", "Market value"]
+                st.dataframe(disp_full, hide_index=True, width="stretch", height=420)
+
+                # Download the full combined book
+                st.download_button(
+                    "Download combined portfolio as CSV",
+                    data=full_portfolio.to_csv(index=False).encode("utf-8"),
+                    file_name="combined_portfolio.csv",
+                    mime="text/csv",
+                    help="Full combined book — every unique ticker with summed value and weight",
+                )
+
+                st.markdown("---")
+                st.markdown("##### Analytics scope")
+                st.caption(
+                    "The risk-analytics pages (Performance, VaR, Sharpe, Monte Carlo, etc.) "
+                    f"need live price history. Fetching all {n_unique:,} tickers would hit "
+                    "Yahoo's rate limits — so pick how many of the largest holdings to "
+                    "include in the live analytics. Geographic and concentration views on "
+                    "the **Fund Holdings page** always cover all positions regardless."
+                )
+
+                c1, c2 = st.columns(2)
+                with c1:
+                    default_top = int(min(100, n_unique))
+                    top_n = st.number_input(
+                        "Include top N by market value",
+                        min_value=10, max_value=int(min(500, n_unique)),
+                        value=default_top, step=5,
+                    )
+                # Build the analytics-scope subset (re-normalized to 100%)
+                scope_df, scope_meta = BB.aggregate_to_portfolio(holdings, top_n=int(top_n))
+                with c2:
+                    st.metric("Coverage of true book", f"{scope_meta['coverage']:.1%}",
+                                help="Share of the true total market value represented "
+                                     "by the analytics-scope subset")
+
+                captured_df = scope_df[["ticker", "description", "weight"]].copy()
+                input_mode = "weight"
         else:
             # ── Standard portfolio CSV path ────────────────────────────────
             parsed = parse_csv(uploaded)
