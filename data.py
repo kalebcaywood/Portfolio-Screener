@@ -245,6 +245,88 @@ CURRENCY_TO_FX = {
     "TRY": "USDTRY=X",
 }
 
+# ────────────────────────────────────────────────────────────────────────────
+# Approximate region weights for the major benchmarks
+# ────────────────────────────────────────────────────────────────────────────
+# Used by the Fund Holdings comparison tab to compare a fund's actual
+# geographic exposure to a benchmark's known regional mix. These are
+# approximations updated to roughly reflect ~2024-2025 index composition;
+# they should be refreshed annually as benchmark weights drift.
+#
+# Region buckets match the labels in bloomberg.EXCHANGE_MAP so a fund's
+# region totals can be diff'd against benchmark weights directly.
+BENCHMARK_REGION_WEIGHTS: dict[str, dict[str, float]] = {
+    "S&P 500": {
+        "North America": 1.00,
+    },
+    "S&P 500 (IVV ETF)": {
+        "North America": 1.00,
+    },
+    "Nasdaq 100": {
+        "North America": 1.00,
+    },
+    "Russell 2000": {
+        "North America": 1.00,
+    },
+    "Dow Jones": {
+        "North America": 1.00,
+    },
+    "MSCI ACWI": {
+        # ~ all-country world; weights approximate
+        "North America": 0.665,   # US ~63% + Canada ~3%
+        "Europe":        0.155,
+        "Asia":          0.145,
+        "Oceania":       0.018,
+        "South America": 0.010,
+        "Middle East":   0.004,
+        "Africa":        0.003,
+    },
+    "MSCI World": {
+        # developed markets only
+        "North America": 0.72,
+        "Europe":        0.17,
+        "Asia":          0.08,
+        "Oceania":       0.03,
+    },
+    "MSCI ACWI ex-US": {
+        # ACWI minus US — Canada still in here
+        "North America": 0.075,
+        "Europe":        0.42,
+        "Asia":          0.43,
+        "Oceania":       0.05,
+        "South America": 0.012,
+        "Middle East":   0.008,
+        "Africa":        0.005,
+    },
+    "MSCI EAFE": {
+        # Europe, Australasia, Far East — DM ex-US/Canada
+        "Europe":  0.65,
+        "Asia":    0.27,
+        "Oceania": 0.08,
+    },
+    "MSCI Europe": {
+        "Europe": 1.00,
+    },
+    "MSCI Japan": {
+        "Asia": 1.00,
+    },
+    "MSCI EM": {
+        # emerging markets only
+        "Asia":          0.78,
+        "South America": 0.10,
+        "Middle East":   0.04,
+        "Africa":        0.04,
+        "Europe":        0.04,
+    },
+    "MSCI China": {
+        "Asia": 1.00,
+    },
+    "MSCI India": {
+        "Asia": 1.00,
+    },
+}
+
+
 # Currency symbols for display
 CURRENCY_SYMBOLS = {
     "USD": "$", "EUR": "€", "GBP": "£", "JPY": "¥", "CHF": "Fr.",

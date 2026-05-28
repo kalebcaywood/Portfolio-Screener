@@ -76,9 +76,11 @@ c[4].metric("Funds in view", df["fund"].nunique())
 
 st.markdown("---")
 
-tab_geo, tab_conc, tab_sector, tab_holdings = st.tabs(
-    ["Geographic breakdown", "Concentration heatmap", "Sector breakdown", "Top holdings"]
-)
+(tab_geo, tab_conc, tab_sector, tab_holdings,
+ tab_vs_fund, tab_vs_bench) = st.tabs([
+    "Geographic breakdown", "Concentration heatmap", "Sector breakdown",
+    "Top holdings", "Fund vs Fund", "Fund vs Benchmark",
+])
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Tab 1: Geographic breakdown
@@ -344,4 +346,300 @@ with tab_holdings:
         data=csv_bytes,
         file_name=f"holdings_{scope_label.replace(' ', '_')}.csv",
         mime="text/csv",
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Tab 5: Fund vs Fund comparison
+# ══════════════════════════════════════════════════════════════════════════════
+with tab_vs_fund:
+    st.subheader("Compare two funds in this book")
+    st.caption(
+        "Side-by-side exposures, position overlap, and concentration. "
+        "Both funds come from the file you uploaded."
+    )
+
+    if len(funds) < 2:
+        st.info("This book has fewer than two funds — nothing to compare.")
+    else:
+        cs1, cs2 = st.columns(2)
+        with cs1:
+            fund_a = st.selectbox("Fund A", funds, index=0, key="fh_compare_a")
+        with cs2:
+            fund_b = st.selectbox("Fund B", funds,
+                                    index=min(1, len(funds) - 1),
+                                    key="fh_compare_b")
+
+        if fund_a == fund_b:
+            st.warning("Pick two different funds.")
+        else:
+            df_a = df_all[df_all["fund"] == fund_a].copy()
+            df_b = df_all[df_all["fund"] == fund_b].copy()
+            mv_a = float(df_a["market_value"].sum())
+            mv_b = float(df_b["market_value"].sum())
+
+            # ── Headline metrics side by side ────────────────────────────
+            st.markdown("---")
+            m = st.columns(4)
+            m[0].metric("Market value",
+                          f"${mv_a:,.0f}", f"vs ${mv_b:,.0f}")
+            m[1].metric("Positions",
+                          f"{len(df_a):,}",
+                          f"vs {len(df_b):,} ({len(df_b) - len(df_a):+,})")
+            m[2].metric("Unique tickers",
+                          f"{df_a['yahoo'].nunique():,}",
+                          f"vs {df_b['yahoo'].nunique():,}")
+            m[3].metric("Countries",
+                          df_a[df_a['country'] != 'Unknown']['country'].nunique(),
+                          f"vs {df_b[df_b['country'] != 'Unknown']['country'].nunique()}")
+
+            # ── Region comparison (grouped bar) ──────────────────────────
+            st.markdown("---")
+            st.markdown("##### Region exposure")
+            ra = df_a.groupby("region")["market_value"].sum() / mv_a if mv_a else df_a.groupby("region")["market_value"].sum()
+            rb = df_b.groupby("region")["market_value"].sum() / mv_b if mv_b else df_b.groupby("region")["market_value"].sum()
+            all_regions = sorted(set(ra.index) | set(rb.index))
+            region_df = pd.DataFrame({
+                "Region": all_regions,
+                fund_a: [float(ra.get(r, 0)) for r in all_regions],
+                fund_b: [float(rb.get(r, 0)) for r in all_regions],
+            })
+            region_df["Active (A − B)"] = region_df[fund_a] - region_df[fund_b]
+
+            long_df = region_df.melt(id_vars="Region", value_vars=[fund_a, fund_b],
+                                       var_name="Fund", value_name="Weight")
+            fig = px.bar(long_df, x="Region", y="Weight", color="Fund",
+                          barmode="group",
+                          title=f"Region exposure: {fund_a} vs {fund_b}")
+            fig.update_yaxes(tickformat=".0%")
+            st.plotly_chart(fig, width="stretch")
+
+            disp = region_df.copy()
+            for c in [fund_a, fund_b, "Active (A − B)"]:
+                disp[c] = disp[c].apply(lambda v: f"{v:+.2%}" if v != 0 else "0.00%")
+            st.dataframe(disp, hide_index=True, width="stretch")
+
+            # ── Country comparison (top 15) ──────────────────────────────
+            st.markdown("##### Country exposure (top 15)")
+            ca = df_a.groupby("country")["market_value"].sum() / mv_a if mv_a else df_a.groupby("country")["market_value"].sum()
+            cb = df_b.groupby("country")["market_value"].sum() / mv_b if mv_b else df_b.groupby("country")["market_value"].sum()
+            all_countries = sorted(set(ca.index) | set(cb.index),
+                                     key=lambda x: -(ca.get(x, 0) + cb.get(x, 0)))[:15]
+            country_df = pd.DataFrame({
+                "Country": all_countries,
+                fund_a: [float(ca.get(c, 0)) for c in all_countries],
+                fund_b: [float(cb.get(c, 0)) for c in all_countries],
+            })
+            country_df["Active (A − B)"] = country_df[fund_a] - country_df[fund_b]
+            long_df = country_df.melt(id_vars="Country", value_vars=[fund_a, fund_b],
+                                        var_name="Fund", value_name="Weight")
+            fig = px.bar(long_df, x="Country", y="Weight", color="Fund",
+                          barmode="group",
+                          title=f"Top-15 country exposure: {fund_a} vs {fund_b}")
+            fig.update_yaxes(tickformat=".0%")
+            fig.update_xaxes(tickangle=-30)
+            st.plotly_chart(fig, width="stretch")
+
+            # ── Position overlap (Jaccard + value overlap) ───────────────
+            st.markdown("---")
+            st.markdown("##### Position overlap")
+
+            agg_a = df_a.groupby("yahoo", as_index=False).agg(
+                mv_a=("market_value", "sum"),
+                country=("country", "first"),
+            )
+            agg_b = df_b.groupby("yahoo", as_index=False).agg(
+                mv_b=("market_value", "sum"),
+                country=("country", "first"),
+            )
+            merged = agg_a.merge(agg_b, on="yahoo", how="outer", suffixes=("_a", "_b"))
+            merged["country"] = merged["country_a"].fillna(merged["country_b"])
+            merged["mv_a"] = merged["mv_a"].fillna(0)
+            merged["mv_b"] = merged["mv_b"].fillna(0)
+
+            shared = merged[(merged["mv_a"] > 0) & (merged["mv_b"] > 0)]
+            only_a = merged[(merged["mv_a"] > 0) & (merged["mv_b"] == 0)]
+            only_b = merged[(merged["mv_a"] == 0) & (merged["mv_b"] > 0)]
+            n_union = len(merged)
+            jaccard = len(shared) / n_union if n_union > 0 else 0
+            shared_val_a = float(shared["mv_a"].sum())
+            shared_val_b = float(shared["mv_b"].sum())
+            shared_pct_a = shared_val_a / mv_a if mv_a else 0
+            shared_pct_b = shared_val_b / mv_b if mv_b else 0
+
+            ms = st.columns(5)
+            ms[0].metric("Tickers in both", f"{len(shared):,}")
+            ms[1].metric(f"Only in {fund_a}", f"{len(only_a):,}")
+            ms[2].metric(f"Only in {fund_b}", f"{len(only_b):,}")
+            ms[3].metric("Jaccard overlap", f"{jaccard:.1%}",
+                           help="# shared tickers / # unique tickers across both funds")
+            ms[4].metric("Shared value",
+                           f"{shared_pct_a:.1%} of A · {shared_pct_b:.1%} of B")
+
+            # Common holdings table — shared by combined value
+            if not shared.empty:
+                shared_disp = shared.copy()
+                shared_disp["pct_a"] = shared_disp["mv_a"] / mv_a if mv_a else 0
+                shared_disp["pct_b"] = shared_disp["mv_b"] / mv_b if mv_b else 0
+                shared_disp["combined"] = shared_disp["mv_a"] + shared_disp["mv_b"]
+                shared_disp = shared_disp.sort_values("combined", ascending=False).head(25)
+
+                tbl = shared_disp[["yahoo", "country", "mv_a", "pct_a",
+                                     "mv_b", "pct_b"]].copy()
+                tbl.columns = ["Ticker", "Country",
+                                f"{fund_a} $", f"{fund_a} %",
+                                f"{fund_b} $", f"{fund_b} %"]
+                tbl[f"{fund_a} $"] = tbl[f"{fund_a} $"].apply(lambda x: f"${x:,.0f}")
+                tbl[f"{fund_b} $"] = tbl[f"{fund_b} $"].apply(lambda x: f"${x:,.0f}")
+                tbl[f"{fund_a} %"] = tbl[f"{fund_a} %"].apply(lambda x: f"{x:.2%}")
+                tbl[f"{fund_b} %"] = tbl[f"{fund_b} %"].apply(lambda x: f"{x:.2%}")
+                st.markdown(f"**Top 25 shared positions (by combined value)**")
+                st.dataframe(tbl, hide_index=True, width="stretch")
+
+            # ── Concentration metrics side by side ──────────────────────
+            st.markdown("---")
+            st.markdown("##### Concentration metrics")
+            def _conc(d):
+                abs_w = d.groupby("yahoo")["market_value"].sum().abs()
+                if abs_w.sum() == 0:
+                    return dict(hhi=np.nan, eff_n=np.nan, top1=np.nan, top10=np.nan)
+                n = abs_w / abs_w.sum()
+                hhi = float((n ** 2).sum())
+                return dict(
+                    hhi=hhi,
+                    eff_n=(1 / hhi) if hhi > 0 else np.nan,
+                    top1=float(n.max()),
+                    top10=float(n.nlargest(10).sum()),
+                )
+            ca_conc = _conc(df_a)
+            cb_conc = _conc(df_b)
+            conc_df = pd.DataFrame({
+                "Metric": ["HHI", "Effective # names", "Largest position", "Top 10 weight"],
+                fund_a: [
+                    f"{ca_conc['hhi']:.3f}", f"{ca_conc['eff_n']:.1f}",
+                    f"{ca_conc['top1']:.2%}", f"{ca_conc['top10']:.2%}",
+                ],
+                fund_b: [
+                    f"{cb_conc['hhi']:.3f}", f"{cb_conc['eff_n']:.1f}",
+                    f"{cb_conc['top1']:.2%}", f"{cb_conc['top10']:.2%}",
+                ],
+            })
+            st.dataframe(conc_df, hide_index=True, width="stretch")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Tab 6: Fund vs Benchmark
+# ══════════════════════════════════════════════════════════════════════════════
+with tab_vs_bench:
+    st.subheader("Compare a fund's regional exposure to a benchmark")
+    st.caption(
+        "Compares the fund's actual country/region breakdown (from the uploaded "
+        "holdings file) to the benchmark's approximate regional composition. "
+        "Benchmark weights are static reference values updated ~annually; useful "
+        "for over/underweight directional analysis, not exact tracking."
+    )
+
+    # Selectors
+    cs1, cs2 = st.columns(2)
+    with cs1:
+        bench_fund = st.selectbox(
+            "Fund to compare", ["All funds (aggregate)"] + funds,
+            key="fh_bench_fund",
+        )
+    with cs2:
+        from data import BENCHMARK_REGION_WEIGHTS
+        bench_options = list(BENCHMARK_REGION_WEIGHTS.keys())
+        bench_pick = st.selectbox(
+            "Benchmark", bench_options,
+            index=bench_options.index("S&P 500"),
+            key="fh_bench_pick",
+        )
+
+    if bench_fund == "All funds (aggregate)":
+        cmp_df = df_all.copy()
+        cmp_label = "All funds"
+    else:
+        cmp_df = df_all[df_all["fund"] == bench_fund].copy()
+        cmp_label = bench_fund
+
+    cmp_mv = float(cmp_df["market_value"].sum())
+    if cmp_mv == 0:
+        st.warning("Selected fund has no value.")
+        st.stop()
+
+    # Fund's region weights
+    fund_regions = (cmp_df.groupby("region")["market_value"].sum() / cmp_mv).to_dict()
+    bench_regions = BENCHMARK_REGION_WEIGHTS[bench_pick]
+
+    all_regions = sorted(set(fund_regions.keys()) | set(bench_regions.keys()))
+    rows = []
+    for r in all_regions:
+        if r == "Unknown":
+            continue
+        f_w = float(fund_regions.get(r, 0))
+        b_w = float(bench_regions.get(r, 0))
+        rows.append({
+            "Region": r,
+            f"{cmp_label}": f_w,
+            f"{bench_pick}": b_w,
+            "Active (Fund − Bench)": f_w - b_w,
+        })
+    cmp_table = pd.DataFrame(rows)
+
+    # Grouped bar chart
+    long_df = cmp_table.melt(id_vars=["Region"],
+                              value_vars=[cmp_label, bench_pick],
+                              var_name="Source", value_name="Weight")
+    fig = px.bar(long_df, x="Region", y="Weight", color="Source",
+                  barmode="group",
+                  title=f"Region exposure: {cmp_label} vs {bench_pick}")
+    fig.update_yaxes(tickformat=".0%")
+    st.plotly_chart(fig, width="stretch")
+
+    # Active-weight bar (signed)
+    fig = px.bar(
+        cmp_table.sort_values("Active (Fund − Bench)"),
+        x="Region", y="Active (Fund − Bench)",
+        color="Active (Fund − Bench)",
+        color_continuous_scale="RdBu_r", color_continuous_midpoint=0,
+        title=f"Active region weight: {cmp_label} − {bench_pick} (positive = overweight)",
+    )
+    fig.update_yaxes(tickformat=".0%")
+    fig.add_hline(y=0, line_dash="dash", line_color="#94a3b8")
+    st.plotly_chart(fig, width="stretch")
+
+    # Table
+    disp = cmp_table.copy()
+    for c in [cmp_label, bench_pick, "Active (Fund − Bench)"]:
+        disp[c] = disp[c].apply(lambda v: f"{v:+.2%}" if v != 0 else "0.00%")
+    st.dataframe(disp, hide_index=True, width="stretch")
+
+    # ── Summary diff metrics ────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("##### Summary")
+    active_abs = sum(abs(f - b) for f, b in zip(
+        [fund_regions.get(r, 0) for r in all_regions if r != "Unknown"],
+        [bench_regions.get(r, 0) for r in all_regions if r != "Unknown"],
+    ))
+    active_share_region = active_abs / 2  # half-sum-abs convention
+
+    ms = st.columns(4)
+    ms[0].metric("Fund market value", f"${cmp_mv:,.0f}")
+    ms[1].metric("Region active share", f"{active_share_region:.1%}",
+                   help="Half the sum of absolute over/under-weights — 0% = identical regions, 100% = totally disjoint")
+
+    # Find the biggest over/underweight region
+    if not cmp_table.empty:
+        biggest_over = cmp_table.loc[cmp_table["Active (Fund − Bench)"].idxmax()]
+        biggest_under = cmp_table.loc[cmp_table["Active (Fund − Bench)"].idxmin()]
+        ms[2].metric(f"Largest overweight: {biggest_over['Region']}",
+                       f"{biggest_over['Active (Fund − Bench)']:+.1%}")
+        ms[3].metric(f"Largest underweight: {biggest_under['Region']}",
+                       f"{biggest_under['Active (Fund − Bench)']:+.1%}")
+
+    st.caption(
+        "**Note**: benchmark region weights are static reference figures "
+        "(updated approximately annually). For exact, live benchmark holdings, "
+        "the iShares ETF holdings file (downloadable from BlackRock) would be "
+        "the right source — that's a future enhancement."
     )
