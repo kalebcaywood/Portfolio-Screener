@@ -213,6 +213,7 @@ tabs = st.tabs([
     "Reup / Pullback signals",
     "Forward probability of success",
     "Vintage cumulative returns",
+    "Rebalancing tool",
     "Methodology",
 ])
 
@@ -681,9 +682,257 @@ with tabs[3]:
         st.plotly_chart(fig, width="stretch")
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Tab 5: Methodology
+# Tab 5: Rebalancing tool
 # ══════════════════════════════════════════════════════════════════════════════
 with tabs[4]:
+    st.subheader("Rebalancing tool — add-position simulator + trade generator")
+    st.caption(
+        "Drop in a hypothetical ticker, choose a funding source (proportional, "
+        "trim weakest by Reup score, or trim largest positions), and see how the "
+        "portfolio's risk and return metrics change. Outputs a buy/sell trade list."
+    )
+
+    from data import compute_returns, fetch_prices
+    from portfolio_input import clean_ticker as _clean_t, is_valid_ticker as _valid_t
+
+    # ─── Inputs ────────────────────────────────────────────────────────────
+    c1, c2, c3 = st.columns([2, 1, 1.4])
+    with c1:
+        new_ticker_raw = st.text_input(
+            "Hypothetical ticker (Yahoo symbol)",
+            value="QQQ",
+            help="US: AAPL, QQQ, IWM · Foreign: 7203.T, BARC.L · ETF: ACWI, EEM",
+        )
+    with c2:
+        target_weight = st.number_input(
+            "Target weight",
+            min_value=-0.50, max_value=0.50, value=0.05, step=0.01, format="%.3f",
+            help="As decimal (0.05 = 5%). Negative = short.",
+        )
+    with c3:
+        funding_method = st.selectbox(
+            "Funding source",
+            ["Trim weakest by Reup score", "Trim largest positions",
+              "Proportional across all", "Cash (no trim — leverage)"],
+            help="Where the capital for the new position comes from.",
+        )
+
+    if st.button("Simulate rebalance impact", type="primary"):
+        new_ticker = _clean_t(new_ticker_raw)
+        if not new_ticker or not _valid_t(new_ticker):
+            st.error("Invalid ticker — check the format.")
+            st.stop()
+
+        # Avoid duplicates
+        if new_ticker in weights.index:
+            st.warning(f"{new_ticker} is already in the portfolio at "
+                         f"{weights[new_ticker]:.2%}. The simulator will REPLACE its "
+                         "weight with the target.")
+
+        # Fetch price history for the new ticker
+        period = st.session_state.get("period", "5y")
+        with st.spinner(f"Fetching {new_ticker} price history..."):
+            new_prices = fetch_prices((new_ticker,), period=period)
+        if new_prices.empty or new_ticker not in new_prices.columns:
+            st.error(f"No data for {new_ticker} from Yahoo. Check the symbol.")
+            st.stop()
+        new_returns = new_prices[new_ticker].pct_change().dropna()
+
+        # ─── Build the new weight vector ────────────────────────────────
+        cur_w = weights.copy()
+        if new_ticker in cur_w.index:
+            cur_w = cur_w.drop(new_ticker)
+
+        if funding_method == "Cash (no trim — leverage)":
+            new_w = cur_w.copy()
+            new_w[new_ticker] = target_weight
+        else:
+            # Need to trim |target_weight| from the existing book
+            amount_needed = abs(target_weight)
+
+            if funding_method == "Proportional across all":
+                # Scale all current weights down so they sum to (1 - target)
+                cur_gross = cur_w.abs().sum()
+                if cur_gross > 0:
+                    scale = max(0.0, 1.0 - amount_needed) / cur_gross
+                    new_w = cur_w * scale
+                else:
+                    new_w = cur_w.copy()
+                new_w[new_ticker] = target_weight
+
+            elif funding_method == "Trim weakest by Reup score":
+                # Pull score for each existing ticker (long-only path: trim positives)
+                score_map = {p["ticker"]: p["scores"]["composite"]
+                              for p in pacing_results}
+                # Ranked ascending = trim weakest first
+                ranked = sorted(cur_w.index, key=lambda t: score_map.get(t, 0.0))
+                new_w = cur_w.copy()
+                remaining = amount_needed
+                for t in ranked:
+                    if remaining <= 0:
+                        break
+                    avail = abs(new_w[t])
+                    if avail <= 0:
+                        continue
+                    take = min(avail, remaining)
+                    new_w[t] -= take * np.sign(new_w[t])
+                    remaining -= take
+                new_w[new_ticker] = target_weight
+
+            else:  # Trim largest positions
+                ranked = cur_w.abs().sort_values(ascending=False).index.tolist()
+                new_w = cur_w.copy()
+                remaining = amount_needed
+                for t in ranked:
+                    if remaining <= 0:
+                        break
+                    avail = abs(new_w[t])
+                    if avail <= 0:
+                        continue
+                    take = min(avail, remaining)
+                    new_w[t] -= take * np.sign(new_w[t])
+                    remaining -= take
+                new_w[new_ticker] = target_weight
+
+        # ─── Compute before-vs-after returns ────────────────────────────
+        # Align all return series on common dates
+        all_tickers_after = list(new_w.index)
+        combined_returns = returns.copy()
+        if new_ticker not in combined_returns.columns:
+            combined_returns = combined_returns.join(new_returns.rename(new_ticker), how="inner")
+        common_idx = combined_returns.dropna(subset=[new_ticker]).index
+        if len(common_idx) < 30:
+            st.warning(
+                f"Only {len(common_idx)} overlapping days between {new_ticker} and "
+                "your portfolio's returns — analysis may be unreliable."
+            )
+
+        combined_returns = combined_returns.loc[common_idx]
+
+        port_ret_before = portfolio_returns(combined_returns[list(weights.index)],
+                                              weights)
+        port_ret_after = portfolio_returns(
+            combined_returns[[c for c in all_tickers_after if c in combined_returns.columns]],
+            new_w[[c for c in all_tickers_after if c in combined_returns.columns]],
+        )
+
+        bench_aligned = bench_returns.reindex(port_ret_before.index)
+
+        stats_before = A.summary_stats(port_ret_before, bench_aligned, rf)
+        stats_after = A.summary_stats(port_ret_after, bench_aligned, rf)
+
+        # ─── Side-by-side comparison ────────────────────────────────────
+        st.markdown("---")
+        st.markdown("##### Before vs After")
+
+        rows = [
+            ("Total return",      "total_return",   "{:+.2%}"),
+            ("CAGR",              "cagr",           "{:+.2%}"),
+            ("Annualized vol",    "ann_vol",        "{:.2%}"),
+            ("Sharpe",            "sharpe",         "{:.2f}"),
+            ("Sortino",           "sortino",        "{:.2f}"),
+            ("Max drawdown",      "max_drawdown",   "{:.2%}"),
+            ("Skewness",          "skew",           "{:.3f}"),
+            ("Excess kurtosis",   "kurtosis",       "{:.3f}"),
+            ("Alpha (annual)",    "alpha",          "{:+.2%}"),
+            ("Beta",              "beta",           "{:.3f}"),
+            ("Info ratio",        "info_ratio",     "{:.2f}"),
+            ("Tracking error",    "tracking_error", "{:.2%}"),
+        ]
+        comp_rows = []
+        for label, key, fmt in rows:
+            b = stats_before.get(key, np.nan)
+            a = stats_after.get(key, np.nan)
+            if pd.notna(b) and pd.notna(a):
+                b_s, a_s = fmt.format(b), fmt.format(a)
+                delta = a - b
+                delta_s = ("{:+.4f}".format(delta) if abs(delta) < 0.01
+                            else "{:+.2%}".format(delta) if "%" in fmt
+                            else "{:+.3f}".format(delta))
+            else:
+                b_s = "—" if pd.isna(b) else fmt.format(b)
+                a_s = "—" if pd.isna(a) else fmt.format(a)
+                delta_s = "—"
+            comp_rows.append({"Metric": label, "Current": b_s,
+                                "Hypothetical": a_s, "Δ": delta_s})
+        st.dataframe(pd.DataFrame(comp_rows), hide_index=True, width="stretch")
+
+        # ─── Concentration impact ────────────────────────────────────────
+        st.markdown("##### Concentration impact")
+        def _hhi(w):
+            a = w.abs(); s = a.sum()
+            if s == 0: return np.nan
+            n = a / s
+            return float((n ** 2).sum())
+        hhi_b = _hhi(weights); hhi_a = _hhi(new_w)
+        eff_n_b = 1 / hhi_b if hhi_b else np.nan
+        eff_n_a = 1 / hhi_a if hhi_a else np.nan
+
+        m = st.columns(4)
+        m[0].metric("HHI", f"{hhi_a:.3f}", f"{(hhi_a - hhi_b):+.3f}",
+                       delta_color="inverse")
+        m[1].metric("Effective # names", f"{eff_n_a:.1f}",
+                       f"{(eff_n_a - eff_n_b):+.1f}")
+        m[2].metric("Largest position", f"{new_w.abs().max():.2%}",
+                       f"{(new_w.abs().max() - weights.abs().max()):+.2%}",
+                       delta_color="inverse")
+        m[3].metric("Net exposure", f"{new_w.sum():.1%}",
+                       f"{(new_w.sum() - weights.sum()):+.1%}")
+
+        # ─── Trade list ──────────────────────────────────────────────────
+        st.markdown("##### Trade list")
+        aum_for_trades = float(st.session_state.get("aum", 1_000_000.0))
+
+        all_tickers = sorted(set(weights.index) | set(new_w.index))
+        trades = []
+        for t in all_tickers:
+            w_b = float(weights.get(t, 0.0))
+            w_a = float(new_w.get(t, 0.0))
+            delta_w = w_a - w_b
+            delta_d = delta_w * aum_for_trades
+            if abs(delta_w) < 1e-6:
+                continue
+            action = ("BUY" if delta_w > 0 else "SELL")
+            trades.append({
+                "Ticker": t,
+                "Current weight": f"{w_b:+.2%}",
+                "Hypothetical weight": f"{w_a:+.2%}",
+                "Δ weight": f"{delta_w:+.2%}",
+                "Δ dollars": f"${delta_d:+,.0f}",
+                "Action": action,
+            })
+        trade_df = pd.DataFrame(trades)
+        if not trade_df.empty:
+            # Sort largest dollar moves first
+            trade_df["_sort"] = trade_df["Δ dollars"].apply(
+                lambda s: float(s.replace("$", "").replace(",", "").replace("+", ""))
+            )
+            trade_df = trade_df.sort_values("_sort", key=lambda c: -c.abs()).drop(columns="_sort")
+            st.dataframe(trade_df, hide_index=True, width="stretch")
+
+            csv_bytes = trade_df.drop(columns=[]).to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "Download trade list (CSV)",
+                data=csv_bytes,
+                file_name=f"rebalance_trades_{new_ticker}.csv",
+                mime="text/csv",
+            )
+
+        # ─── Cumulative-return overlay ───────────────────────────────────
+        st.markdown("##### Equity-curve comparison")
+        cum_b = (1 + port_ret_before).cumprod()
+        cum_a = (1 + port_ret_after).cumprod()
+        chart_df = pd.DataFrame({"Current portfolio": cum_b,
+                                   f"With {new_ticker}": cum_a})
+        fig = px.line(chart_df, title="Historical cumulative growth of $1 — current vs hypothetical")
+        fig.update_layout(height=380, hovermode="x unified")
+        st.plotly_chart(fig, width="stretch")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Tab 6: Methodology
+# ══════════════════════════════════════════════════════════════════════════════
+with tabs[5]:
     st.subheader("Methodology")
     st.markdown(r"""
 #### Pacing tracker
