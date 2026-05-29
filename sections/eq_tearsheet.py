@@ -54,12 +54,33 @@ with st.spinner(f"Pulling {ticker} data..."):
     history = fetch_history(ticker, period=period)
     financials = fetch_financials(ticker)
 
-if not info or info.get("trailingPegRatio") is None and info.get("marketCap") is None and history.empty:
+# Treat the ticker as having "no data" only when BOTH the info payload and
+# the price history are empty. Yahoo frequently returns an empty info dict
+# for valid tickers when called from cloud IPs — in that case we can still
+# render a meaningful tearsheet from price history alone.
+info_has_signal = bool(info) and any(
+    info.get(k) is not None
+    for k in ("marketCap", "currentPrice", "regularMarketPrice",
+              "shortName", "longName", "sharesOutstanding")
+)
+if not info_has_signal and history.empty:
     st.error(
-        f"No data returned for **{ticker}**. Check the symbol — "
-        "foreign tickers need exchange suffixes (e.g. `7203.T`, `BARC.L`)."
+        f"No data returned for **{ticker}**. This usually means one of:\n\n"
+        "• The symbol is wrong — foreign tickers need exchange suffixes "
+        "(e.g. `7203.T`, `BARC.L`, `0700.HK`).\n"
+        "• Yahoo Finance is rate-limiting this server. Wait a minute and "
+        "try again, or refresh the page to retry."
     )
     st.stop()
+
+if not info_has_signal:
+    # We have history but no rich info — warn the user that some fundamental
+    # fields will read "—" while still rendering price-based panels.
+    st.info(
+        "Yahoo Finance returned only price data for this ticker. Fundamental "
+        "fields below may show \"—\" while the rich-info endpoint is "
+        "unavailable. Refresh the page in a minute to retry."
+    )
 
 
 def _get(key, default=None):

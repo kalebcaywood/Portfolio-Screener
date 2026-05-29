@@ -1,5 +1,22 @@
-"""Data fetching and quantitative metric computation for the equity screener."""
+"""Data fetching and quantitative metric computation for the equity screener.
+
+Resilience notes:
+  Yahoo Finance routinely rate-limits or returns empty ``info`` payloads when
+  called from cloud IP ranges (Streamlit Cloud, Heroku, etc.). To keep the
+  screener from going blank under those conditions we:
+
+    1. Use a ``curl_cffi`` session with browser impersonation when available
+       (yfinance reads the ``session=`` kwarg and routes its HTTP calls through
+       it). This sidesteps most Yahoo bot heuristics.
+    2. Retry empty info responses once before giving up.
+    3. Fall back to ``Ticker.fast_info`` and seed a minimal ``info`` dict so
+       downstream code (tearsheet, screener) still gets headline fields like
+       market cap, currency, and last price even when the rich endpoint is
+       blocked.
+"""
 from __future__ import annotations
+
+import time
 
 import numpy as np
 import pandas as pd
@@ -10,28 +27,110 @@ RISK_FREE_RATE = 0.04
 TRADING_DAYS = 252
 BENCHMARK = "^GSPC"
 
+# Build a session that impersonates a real browser so Yahoo is less likely
+# to rate-limit us. yfinance picks this up via the ``session=`` kwarg.
+try:  # pragma: no cover - depends on optional dep
+    from curl_cffi import requests as _curl_requests
+
+    _YF_SESSION = _curl_requests.Session(impersonate="chrome")
+except Exception:  # noqa: BLE001 - any failure → fall back to default requests
+    _YF_SESSION = None
+
+
+def _ticker(symbol: str) -> yf.Ticker:
+    """Construct a yfinance Ticker, attaching our browser-impersonating session
+    when available. Without the session, yfinance uses plain ``requests`` which
+    Yahoo blocks from many cloud IPs."""
+    if _YF_SESSION is not None:
+        try:
+            return yf.Ticker(symbol, session=_YF_SESSION)
+        except TypeError:
+            # Older yfinance versions don't accept session — fall through.
+            pass
+    return yf.Ticker(symbol)
+
+
+def _fast_info_to_dict(t: yf.Ticker) -> dict:
+    """Pull whatever we can from ``fast_info`` and shape it like ``info``.
+
+    Used as a fallback when ``Ticker.info`` returns ``{}`` (cloud-IP block).
+    """
+    out: dict = {}
+    try:
+        fi = t.fast_info
+    except Exception:
+        return out
+    mapping = {
+        "last_price": "currentPrice",
+        "market_cap": "marketCap",
+        "currency": "currency",
+        "shares": "sharesOutstanding",
+        "year_high": "fiftyTwoWeekHigh",
+        "year_low": "fiftyTwoWeekLow",
+        "previous_close": "regularMarketPreviousClose",
+        "fifty_day_average": "fiftyDayAverage",
+        "two_hundred_day_average": "twoHundredDayAverage",
+        "exchange": "exchange",
+        "quote_type": "quoteType",
+    }
+    for src, dst in mapping.items():
+        try:
+            v = getattr(fi, src, None)
+        except Exception:
+            v = None
+        if v is not None:
+            out[dst] = v
+    return out
+
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_history(symbol: str, period: str = "2y") -> pd.DataFrame:
-    try:
-        hist = yf.Ticker(symbol).history(period=period, auto_adjust=True)
-        return hist if hist is not None else pd.DataFrame()
-    except Exception:
-        return pd.DataFrame()
+    """Fetch adjusted price history. Retries once on empty result."""
+    for attempt in range(2):
+        try:
+            hist = _ticker(symbol).history(period=period, auto_adjust=True)
+            if hist is not None and not hist.empty:
+                return hist
+        except Exception:
+            pass
+        if attempt == 0:
+            time.sleep(0.3)
+    return pd.DataFrame()
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_info(symbol: str) -> dict:
-    try:
-        return yf.Ticker(symbol).info or {}
-    except Exception:
-        return {}
+    """Fetch the rich ``info`` payload. When Yahoo blocks the request we
+    fall back to ``fast_info`` so headline fields are still populated."""
+    t = _ticker(symbol)
+    info: dict | None = None
+    for attempt in range(2):
+        try:
+            raw = t.info
+            if raw:
+                info = raw
+                break
+        except Exception:
+            pass
+        if attempt == 0:
+            time.sleep(0.3)
+
+    if not info:
+        # Rich endpoint failed — synthesize from fast_info so downstream
+        # consumers (tearsheet, screener) still get price + market cap.
+        info = _fast_info_to_dict(t)
+    else:
+        # Backfill any holes from fast_info if it offers something info missed.
+        fast = _fast_info_to_dict(t)
+        for k, v in fast.items():
+            info.setdefault(k, v)
+    return info or {}
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_financials(symbol: str) -> dict:
     try:
-        t = yf.Ticker(symbol)
+        t = _ticker(symbol)
         return {
             "income": t.income_stmt if t.income_stmt is not None else pd.DataFrame(),
             "balance": t.balance_sheet if t.balance_sheet is not None else pd.DataFrame(),

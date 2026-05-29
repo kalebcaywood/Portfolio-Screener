@@ -114,6 +114,21 @@ if "error" in df.columns:
         # Drop failed rows from downstream analysis so they don't poison plots/tables
         df = df[df["error"].isna()].drop(columns=["error"]) if "error" in df.columns else df
 
+# If Yahoo rate-limited us, every row will have NaN for market cap AND price.
+# Detect that case and surface a clear diagnostic instead of showing a sea of dashes.
+if not df.empty:
+    fundamental_cols = [c for c in ("market_cap", "price", "pe_trailing") if c in df.columns]
+    if fundamental_cols:
+        all_nan = df[fundamental_cols].isna().all(axis=None)
+        if all_nan:
+            st.error(
+                "Yahoo Finance returned no fundamental data for any ticker. "
+                "This almost always means the cloud host has been rate-limited "
+                "by Yahoo. Wait 60 seconds and click **Run screener** again, "
+                "or refresh the page to retry."
+            )
+            st.stop()
+
 sectors = sorted([s for s in df["sector"].dropna().unique() if s and s != "Unknown"])
 sector_pick = st.sidebar.multiselect("Sectors (empty = all)", sectors)
 
