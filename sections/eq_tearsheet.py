@@ -175,10 +175,13 @@ with tab_desc:
         st.markdown("##### Key officers")
         rows = []
         for o in officers[:10]:
+            age_val = o.get("age")
             rows.append({
                 "Name": o.get("name", "—"),
                 "Title": o.get("title", "—"),
-                "Age": o.get("age", "—"),
+                # Cast Age to string so Arrow doesn't choke when some rows
+                # have an int and others have the em-dash sentinel.
+                "Age": str(age_val) if age_val not in (None, "") else "—",
                 "Total pay": _fmt_money(o.get("totalPay"), currency)
                               if o.get("totalPay") else "—",
             })

@@ -91,10 +91,11 @@ with tab3:
     link_method = st.selectbox("Linkage", ["average", "single", "complete", "ward"], index=0)
     n_clusters = st.slider("Number of clusters to highlight", 2, max(2, len(tickers) - 1), min(4, len(tickers) - 1))
 
-    # Build distance matrix
-    dist = 1 - corr.abs()
-    np.fill_diagonal(dist.values, 0)
-    condensed = squareform(dist.values, checks=False)
+    # Build distance matrix. .values can be a read-only view in newer
+    # pandas — copy() guarantees a writable buffer for fill_diagonal.
+    dist_arr = (1 - corr.abs()).to_numpy(copy=True)
+    np.fill_diagonal(dist_arr, 0)
+    condensed = squareform(dist_arr, checks=False)
     Z = linkage(condensed, method=link_method)
 
     # Dendrogram
