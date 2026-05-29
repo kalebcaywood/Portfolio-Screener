@@ -198,8 +198,28 @@ def rsi(prices: pd.Series, period: int = 14) -> float:
     return float(val) if pd.notna(val) else np.nan
 
 
+def _align_returns(a: pd.Series, b: pd.Series) -> pd.DataFrame:
+    """Inner-join two return series on calendar date, ignoring timezone.
+
+    Foreign listings come back tz-localized to their home exchange
+    (Asia/Tokyo, Asia/Taipei, Europe/Zurich, …) while a US benchmark like
+    ^GSPC is America/New_York. A naive timestamp join then matches nothing
+    (e.g. ``2024-01-15 00:00-05:00`` != ``2024-01-15 00:00+09:00``), which
+    made beta NaN for *every* foreign equity. Normalizing both indices to
+    tz-naive calendar dates restores cross-exchange alignment.
+    """
+    def _norm(s: pd.Series) -> pd.Series:
+        idx = pd.DatetimeIndex(s.index)
+        if idx.tz is not None:
+            idx = idx.tz_localize(None)
+        out = pd.Series(np.asarray(s.values), index=idx.normalize())
+        return out[~out.index.duplicated(keep="last")]
+
+    return pd.concat([_norm(a), _norm(b)], axis=1, join="inner").dropna()
+
+
 def beta_vs_benchmark(symbol_returns: pd.Series, bench_returns: pd.Series) -> float:
-    df = pd.concat([symbol_returns, bench_returns], axis=1, join="inner").dropna()
+    df = _align_returns(symbol_returns, bench_returns)
     if len(df) < 30:
         return np.nan
     cov = df.cov().iloc[0, 1]
@@ -281,6 +301,38 @@ def _normalize_yf_pct(value):
     return value / 100 if abs(value) > 1 else value
 
 
+def dividend_yield_decimal(info: dict) -> float:
+    """Resolve a dividend yield to a decimal (0.025 == 2.5%).
+
+    yfinance has repeatedly flip-flopped on units for ``dividendYield``:
+    older builds returned a decimal (0.025) while current builds return a
+    percent number (2.5 → meaning 2.5%, and 0.35 → meaning 0.35%). The naive
+    ``value/100 if value > 1`` heuristic therefore reported absurd figures
+    like 35% for Apple (raw 0.35, which is really 0.35%).
+
+    We disambiguate using ``trailingAnnualDividendYield`` — which is always a
+    decimal — as ground truth: pick whichever interpretation of
+    ``dividendYield`` lands closest to it. When the trailing field is absent
+    (some foreign listings), fall back to dividing by 100 (modern behavior).
+    """
+    dy = info.get("dividendYield")
+    tay = info.get("trailingAnnualDividendYield")
+    dy_ok = dy is not None and not (isinstance(dy, float) and np.isnan(dy))
+    tay_ok = tay is not None and not (isinstance(tay, float) and np.isnan(tay))
+
+    if dy_ok:
+        dy = float(dy)
+        if tay_ok and tay > 0:
+            as_pct = dy / 100.0
+            # Closer to the trailing decimal wins.
+            return as_pct if abs(as_pct - tay) <= abs(dy - tay) else dy
+        # No reliable reference — modern yfinance reports percent.
+        return dy / 100.0
+    if tay_ok:
+        return float(tay)
+    return np.nan
+
+
 def compute_metrics(symbol: str, bench_returns: pd.Series | None = None) -> dict:
     info = fetch_info(symbol)
     hist = fetch_history(symbol, "2y")
@@ -318,7 +370,7 @@ def compute_metrics(symbol: str, bench_returns: pd.Series | None = None) -> dict
     m["current_ratio"] = info.get("currentRatio", np.nan)
     m["quick_ratio"] = info.get("quickRatio", np.nan)
 
-    m["div_yield"] = _normalize_yf_pct(info.get("dividendYield", np.nan))
+    m["div_yield"] = dividend_yield_decimal(info)
     m["payout_ratio"] = info.get("payoutRatio", np.nan)
 
     if not hist.empty and "Close" in hist.columns and len(hist) > 5:

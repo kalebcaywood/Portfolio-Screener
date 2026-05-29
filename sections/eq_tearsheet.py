@@ -15,7 +15,7 @@ import streamlit as st
 
 from data import format_market_cap
 from portfolio_input import clean_ticker, is_valid_ticker
-from screener import fetch_financials, fetch_history, fetch_info
+from screener import dividend_yield_decimal, fetch_financials, fetch_history, fetch_info
 from theme import inject_css
 
 inject_css()
@@ -204,11 +204,16 @@ with tab_val:
 
     st.markdown("---")
     st.markdown("##### Dividend & shareholder returns")
+    # yfinance returns these yields as percent numbers (0.35 == 0.35%);
+    # dividend_yield_decimal disambiguates against the trailing field, and the
+    # 5Y average field is always a percent, so divide by 100.
+    five_yr = _get("fiveYearAvgDividendYield")
     c = st.columns(4)
-    c[0].metric("Dividend yield", _fmt_pct(_get("dividendYield") / 100 if _get("dividendYield") and _get("dividendYield") > 1 else _get("dividendYield")))
+    c[0].metric("Dividend yield", _fmt_pct(dividend_yield_decimal(info)))
     c[1].metric("Trailing div / share", _fmt_num(_get("trailingAnnualDividendRate"), "{:,.2f}"))
     c[2].metric("Payout ratio", _fmt_pct(_get("payoutRatio")))
-    c[3].metric("5Y avg div yield", _fmt_pct(_get("fiveYearAvgDividendYield") / 100 if _get("fiveYearAvgDividendYield") and _get("fiveYearAvgDividendYield") > 1 else _get("fiveYearAvgDividendYield")))
+    c[3].metric("5Y avg div yield",
+                _fmt_pct(five_yr / 100 if five_yr is not None else None))
 
     st.markdown("---")
     st.markdown("##### Share data")
