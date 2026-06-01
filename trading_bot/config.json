@@ -1,0 +1,52 @@
+{
+  "enabled": true,
+  "dry_run": false,
+  "account_number": "966399511",
+  "account_nickname": "Agentic (cash)",
+  "universe": [
+    "AAPL", "MSFT", "NVDA", "AMD", "GOOGL", "AMZN", "META", "TSLA", "AVGO", "ADBE",
+    "CRM", "ORCL", "INTC", "QCOM", "CSCO", "TXN", "MU", "AMAT", "NOW", "PLTR",
+    "NFLX", "DIS", "NKE", "SBUX", "MCD", "HD", "LOW", "COST", "WMT", "TGT",
+    "KO", "PEP", "PG", "PM", "JPM", "BAC", "WFC", "GS", "MS", "C",
+    "V", "MA", "AXP", "UNH", "JNJ", "LLY", "PFE", "MRK", "ABBV", "TMO",
+    "BMY", "ABT", "XOM", "CVX", "COP", "CAT", "BA", "GE", "HON", "UPS",
+    "DE", "LMT", "F", "GM", "UBER", "ABNB", "PYPL",
+    "SPY", "QQQ", "DIA", "IWM", "XLF", "XLK", "XLE", "SMH"
+  ],
+  "strategy": {
+    "fast_ma": 10,
+    "slow_ma": 30,
+    "trend_ma": 50,
+    "rsi_period": 14,
+    "rsi_overbought": 70,
+    "rsi_exit": 78,
+    "atr_period": 14,
+    "atr_stop_mult": 2.5,
+    "take_profit_pct": 0.15,
+    "tp_atr_mult": 4.0,
+    "resistance_lookback": 60,
+    "min_reward_risk": 0.0,
+    "lookback_days": 250
+  },
+  "news": {
+    "enabled": true,
+    "mode": "filter",
+    "require_positive_for_buy": false,
+    "sentiment_lookback_hours": 48,
+    "max_watchlist": 25,
+    "_mode_help": "off=ignore | alert=watchlist+log only | filter=block buys on negative news (default) | autonomous=allow news to trigger buys (NOT recommended; restricted to universe+tradable+caps)"
+  },
+  "risk": {
+    "max_position_notional": 50.0,
+    "min_order_notional": 10.0,
+    "max_total_deployed": 200.0,
+    "max_positions": 6,
+    "max_new_buys_per_day": 6,
+    "max_trades_per_day": 12,
+    "daily_loss_limit": 15.0,
+    "cash_buffer": 10.0,
+    "settled_cash_only": true,
+    "regular_hours_only": true,
+    "_settlement_note": "Cash account: buys are capped at broker buying_power (settled funds) so good-faith violations cannot occur. T+1 settlement naturally prevents redeploying same-day sale proceeds. max_trades_per_day is a runaway guard, not a target."
+  }
+}
