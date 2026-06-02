@@ -76,10 +76,15 @@ type trading_bot\trades.jsonl
 
 ## Universe (`config.json → universe` + `universe.json`)
 
-~75 highly liquid large-caps + sector ETFs. `universe.json` holds each name's
-company name, sector, and **aliases** (brands/people) so news mentions map to
-tickers deterministically (`python -m trading_bot.news match "headline"`).
-The bot *scans* all of them; with the current cap it *holds* ~2 at a time.
+**High-beta / high-risk tilt:** ~40 names, every one with **beta ≥ 1.3 vs SPY**
+(computed over 2y; annualized vol ~35–98%) — semis, AI/software, crypto-proxies
+(COIN/MSTR/MARA/RIOT), EV (RIVN/LCID), high-beta fintech (SOFI/AFRM/UPST/HOOD),
+and cyclical travel (CCL/NCLH/DAL/AAL). No defensives, no index ETFs, and **no
+daily-leveraged ETFs** (they decay over multi-day swing holds). `universe.json`
+holds each name's company name, sector, and **aliases** (brands/people) so news
+mentions map to tickers deterministically (`python -m trading_bot.news match
+"headline"`). Expect bigger swings and more frequent stop-outs — the guardrails
+(ATR stops, $50 cap, daily-loss breaker) are intentionally kept.
 
 To add a name: put the symbol in `config.json → universe` **and** add a matching
 metadata row in `universe.json` (a sync check runs in tests).

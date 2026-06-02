@@ -3,15 +3,12 @@
   "dry_run": false,
   "account_number": "966399511",
   "account_nickname": "Agentic (cash)",
+  "_universe_note": "HIGH-BETA / HIGH-RISK tilt: every name has beta >= 1.3 vs SPY (computed over 2y), annualized vol ~35-98%. No defensives, no index ETFs, no daily-leveraged ETFs (they decay over multi-day swing holds). Expect bigger swings and more frequent stop-outs — guardrails (stops, $50 cap, daily-loss breaker) are intentionally kept.",
   "universe": [
-    "AAPL", "MSFT", "NVDA", "AMD", "GOOGL", "AMZN", "META", "TSLA", "AVGO", "ADBE",
-    "CRM", "ORCL", "INTC", "QCOM", "CSCO", "TXN", "MU", "AMAT", "NOW", "PLTR",
-    "NFLX", "DIS", "NKE", "SBUX", "MCD", "HD", "LOW", "COST", "WMT", "TGT",
-    "KO", "PEP", "PG", "PM", "JPM", "BAC", "WFC", "GS", "MS", "C",
-    "V", "MA", "AXP", "UNH", "JNJ", "LLY", "PFE", "MRK", "ABBV", "TMO",
-    "BMY", "ABT", "XOM", "CVX", "COP", "CAT", "BA", "GE", "HON", "UPS",
-    "DE", "LMT", "F", "GM", "UBER", "ABNB", "PYPL",
-    "SPY", "QQQ", "DIA", "IWM", "XLF", "XLK", "XLE", "SMH"
+    "NVDA", "AMD", "AVGO", "MU", "MRVL", "LRCX", "KLAC", "AMAT", "ON", "ARM",
+    "SMCI", "QCOM", "INTC", "TXN", "PLTR", "SNOW", "CRWD", "NET", "MDB", "SHOP",
+    "ORCL", "TSLA", "META", "AMZN", "ABNB", "CVNA", "COIN", "MSTR", "MARA", "RIOT",
+    "HOOD", "SOFI", "AFRM", "UPST", "RIVN", "LCID", "NCLH", "CCL", "DAL", "AAL"
   ],
   "strategy": {
     "fast_ma": 10,
