@@ -83,6 +83,157 @@ def _fast_info_to_dict(t: yf.Ticker) -> dict:
     return out
 
 
+# ── Fundamentals reconstruction (used when quoteSummary / .info is blocked) ──
+
+def _stmt_row(df: pd.DataFrame, key: str, col: int = 0):
+    """Safely pull a single statement value (latest col = 0). Returns None."""
+    if df is None or df.empty or key not in df.index or col >= df.shape[1]:
+        return None
+    try:
+        v = float(df.loc[key].iloc[col])
+        return v if pd.notna(v) else None
+    except (KeyError, IndexError, TypeError, ValueError):
+        return None
+
+
+def _stmt_first(df: pd.DataFrame, keys: list[str], col: int = 0):
+    """First non-None value among several candidate row labels."""
+    for k in keys:
+        v = _stmt_row(df, k, col)
+        if v is not None:
+            return v
+    return None
+
+
+def _has_fundamentals(info: dict) -> bool:
+    """True if the rich fundamentals we care about are present.
+
+    When Yahoo blocks quoteSummary these keys are all missing even though
+    fast_info (price, market cap, shares) succeeds — that's our signal to
+    rebuild from the statement endpoints.
+    """
+    return any(
+        info.get(k) is not None
+        for k in ("trailingPE", "priceToBook", "returnOnEquity",
+                  "profitMargins", "totalRevenue")
+    )
+
+
+def _reconstruct_info_from_statements(symbol: str, t: yf.Ticker, base: dict) -> dict:
+    """Rebuild the fundamental fields normally found in ``Ticker.info`` from
+    the financial-statement, dividend, and fast_info endpoints.
+
+    Yahoo's quoteSummary endpoint (which powers ``.info``) is frequently
+    blocked for cloud IP ranges, returning an empty dict even though the
+    statement and chart endpoints still work. This rebuilds P/E, P/B, P/S,
+    ROE, ROA, margins, growth, leverage, liquidity, dividend yield, and EV
+    multiples — keyed with yfinance's own ``.info`` names — so the screener
+    and tearsheet stay populated on those hosts.
+    """
+    info = dict(base)
+    fin = fetch_financials(symbol)
+    inc, bs, cf = fin["income"], fin["balance"], fin["cashflow"]
+    if (inc is None or inc.empty) and (bs is None or bs.empty):
+        return info  # no statements to rebuild from
+
+    price = info.get("currentPrice")
+    shares = info.get("sharesOutstanding")
+    mcap = info.get("marketCap")
+    if mcap is None and price is not None and shares:
+        mcap = price * shares
+        info["marketCap"] = mcap
+
+    # Income statement (latest = col 0; prior year = col 1 for growth)
+    rev = _stmt_first(inc, ["Total Revenue", "Operating Revenue"])
+    ni = _stmt_first(inc, ["Net Income Common Stockholders", "Net Income"])
+    gp = _stmt_row(inc, "Gross Profit")
+    opinc = _stmt_first(inc, ["Operating Income", "Total Operating Income As Reported"])
+    ebitda = _stmt_first(inc, ["EBITDA", "Normalized EBITDA"])
+    eps = _stmt_first(inc, ["Diluted EPS", "Basic EPS"])
+    rev_p = _stmt_first(inc, ["Total Revenue", "Operating Revenue"], col=1)
+    ni_p = _stmt_first(inc, ["Net Income Common Stockholders", "Net Income"], col=1)
+
+    # Balance sheet
+    equity = _stmt_first(bs, ["Stockholders Equity", "Common Stock Equity",
+                              "Total Equity Gross Minority Interest"])
+    debt = _stmt_row(bs, "Total Debt")
+    cash = _stmt_first(bs, ["Cash And Cash Equivalents",
+                            "Cash Cash Equivalents And Short Term Investments"])
+    cur_a = _stmt_row(bs, "Current Assets")
+    cur_l = _stmt_row(bs, "Current Liabilities")
+    inv = _stmt_row(bs, "Inventory")
+    assets = _stmt_row(bs, "Total Assets")
+
+    # Cash flow
+    ocf = _stmt_first(cf, ["Operating Cash Flow",
+                           "Cash Flow From Continuing Operating Activities"])
+    fcf = _stmt_row(cf, "Free Cash Flow")
+
+    def _set(key, val):
+        if val is not None and (not isinstance(val, float) or np.isfinite(val)):
+            info[key] = val
+
+    # Profitability / margins (decimals — yfinance convention)
+    if rev:
+        _set("totalRevenue", rev)
+        if gp is not None:     _set("grossMargins", gp / rev)
+        if opinc is not None:  _set("operatingMargins", opinc / rev)
+        if ni is not None:     _set("profitMargins", ni / rev)
+        if ebitda is not None: _set("ebitdaMargins", ebitda / rev)
+    if ni is not None:
+        _set("netIncomeToCommon", ni)
+        if equity: _set("returnOnEquity", ni / equity)
+        if assets: _set("returnOnAssets", ni / assets)
+    if ebitda is not None: _set("ebitda", ebitda)
+    if eps is not None:    _set("trailingEps", eps)
+
+    # Growth (YoY)
+    if rev and rev_p:               _set("revenueGrowth", rev / rev_p - 1)
+    if ni and ni_p and ni_p != 0:   _set("earningsGrowth", ni / ni_p - 1)
+
+    # Valuation multiples
+    if price is not None and eps and eps != 0:
+        _set("trailingPE", price / eps)
+    if mcap and equity:
+        _set("priceToBook", mcap / equity)
+    if mcap and rev:
+        _set("priceToSalesTrailing12Months", mcap / rev)
+    if mcap is not None:
+        ev = mcap + (debt or 0) - (cash or 0)
+        _set("enterpriseValue", ev)
+        if ebitda: _set("enterpriseToEbitda", ev / ebitda)
+        if rev:    _set("enterpriseToRevenue", ev / rev)
+
+    # Leverage / liquidity
+    if debt is not None and equity:
+        _set("debtToEquity", debt / equity * 100.0)  # yfinance reports as percent
+    if cur_a and cur_l:
+        _set("currentRatio", cur_a / cur_l)
+        if inv is not None:
+            _set("quickRatio", (cur_a - inv) / cur_l)
+    if cash is not None: _set("totalCash", cash)
+    if debt is not None: _set("totalDebt", debt)
+    if ocf is not None:  _set("operatingCashflow", ocf)
+    if fcf is not None:  _set("freeCashflow", fcf)
+
+    # Dividend yield + rate from the dividends (chart) endpoint
+    try:
+        divs = t.dividends
+    except Exception:
+        divs = None
+    if divs is not None and len(divs) and price:
+        idx = pd.DatetimeIndex(divs.index)
+        cutoff = idx.max() - pd.Timedelta(days=365)
+        ttm = float(divs[idx >= cutoff].sum())
+        if ttm > 0:
+            _set("trailingAnnualDividendRate", ttm)
+            _set("trailingAnnualDividendYield", ttm / price)  # decimal
+            _set("dividendRate", ttm)
+
+    info["_reconstructed"] = True
+    return info
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_history(symbol: str, period: str = "2y") -> pd.DataFrame:
     """Fetch adjusted price history. Retries once on empty result."""
@@ -124,6 +275,13 @@ def fetch_info(symbol: str) -> dict:
         fast = _fast_info_to_dict(t)
         for k, v in fast.items():
             info.setdefault(k, v)
+
+    # If the rich fundamentals are missing — i.e. Yahoo blocked quoteSummary
+    # for this host (common on cloud) — rebuild P/E, P/B, ROE, margins, etc.
+    # from the statement and dividend endpoints, which aren't blocked.
+    if not _has_fundamentals(info):
+        info = _reconstruct_info_from_statements(symbol, t, info)
+
     return info or {}
 
 
