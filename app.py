@@ -88,69 +88,38 @@ components.html(
 (function () {
   const PDOC = () => window.parent.document;
 
-  function centerNav() {
-    const doc = PDOC();
-    const header = doc.querySelector('[data-testid="stHeader"]');
-    if (!header) return;
-    // Streamlit's top-position page nav lives in an rc-overflow container.
-    // Fall back to whichever header element holds the most <a> page links.
-    let nav = header.querySelector('.rc-overflow');
-    if (!nav) {
-      let best = null, bestN = 1;
-      header.querySelectorAll('div, ul, nav').forEach((el) => {
-        const n = el.querySelectorAll('a').length;
-        if (n > bestN) { best = el; bestN = n; }
-      });
-      nav = best;
-    }
-    if (!nav) return;
-    // Position the nav against the full-width header (not the sidebar-offset
-    // toolbar): clear positioning on the toolbar wrappers, then shrink the nav
-    // to its content and absolutely-center it. Leaving it stretched would make
-    // "centering" a no-op. The Fork/GitHub badge stays at the right edge.
-    const toolbar = header.querySelector('[data-testid="stToolbar"]');
-    if (toolbar) {
-      toolbar.style.setProperty('position', 'static', 'important');
-      const inner = toolbar.querySelector(':scope > div');
-      if (inner) inner.style.setProperty('position', 'static', 'important');
-    }
-    nav.style.setProperty('position', 'absolute', 'important');
-    nav.style.setProperty('left', '50%', 'important');
-    nav.style.setProperty('transform', 'translateX(-50%)', 'important');
-    nav.style.setProperty('width', 'max-content', 'important');
-    nav.style.setProperty('max-width', '92vw', 'important');
-    nav.style.setProperty('display', 'flex', 'important');
-    nav.style.setProperty('justify-content', 'center', 'important');
-    nav.style.setProperty('white-space', 'nowrap', 'important');
-  }
-
+  // Move the WSJ ticker to be a direct child of <body> so its position:fixed
+  // anchors to the viewport. (Streamlit Cloud's viewer chrome can put a
+  // transform on an ancestor, which would otherwise trap the fixed bar back
+  // into the page flow.) We deliberately do NOT touch the top nav: Streamlit's
+  // rc-overflow widget collapses the 5 section tabs into a bogus "N more"
+  // overflow button if its width/position is overridden.
   function relocateTicker() {
     const doc = PDOC();
     const all = doc.querySelectorAll('.news-tkr');
     if (!all.length) return;
-    // Streamlit re-renders may recreate the ticker inside the (possibly
-    // transformed) main block. Keep the newest, drop stale duplicates, and
-    // hoist it to <body> so position:fixed pins it to the very top.
     const keep = all[all.length - 1];
     all.forEach((t) => { if (t !== keep && t.parentElement) t.parentElement.removeChild(t); });
-    if (keep.parentElement !== doc.body) {
-      doc.body.appendChild(keep);
-    }
+    if (keep.parentElement !== doc.body) doc.body.appendChild(keep);
   }
 
   let obs = null;
-  function apply() {
-    // Disconnect while mutating so our own DOM edits don't re-trigger us.
-    if (obs) obs.disconnect();
-    try { centerNav(); relocateTicker(); } catch (e) {}
-    if (obs) obs.observe(PDOC().body, { childList: true, subtree: true });
+  function onMutation() {
+    // Cheap early-out: only touch the DOM when the ticker is actually missing
+    // from <body> or duplicated, so we never thrash the surrounding layout
+    // (an over-eager observer was a prime suspect for nav glitches).
+    const doc = PDOC();
+    const all = doc.querySelectorAll('.news-tkr');
+    if (!all.length) return;
+    if (all.length === 1 && all[0].parentElement === doc.body) return;
+    obs.disconnect();
+    relocateTicker();
+    obs.observe(doc.body, { childList: true, subtree: true });
   }
 
-  apply();
-  obs = new MutationObserver(apply);
+  relocateTicker();
+  obs = new MutationObserver(onMutation);
   obs.observe(PDOC().body, { childList: true, subtree: true });
-  // Safety re-apply in case a re-render slips through between observer cycles.
-  setInterval(apply, 1000);
 })();
 </script>
 """,

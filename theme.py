@@ -421,26 +421,11 @@ header [role="tab"][aria-selected="true"] {
    the [nav + badge] group, not the nav. Instead we absolutely-center the nav
    container itself so it sits at true screen-center while the badge stays at
    the right edge. */
-header[data-testid="stHeader"] [data-testid="stToolbar"],
-header[data-testid="stHeader"] [data-testid="stToolbar"] > div {
-    position: static !important;
-    width: 100% !important;
-}
-/* Shrink the nav to its content (max-content) and absolutely-center it on the
-   full-width header. width:max-content is essential — otherwise rc-overflow
-   stays stretched and "centering" a full-width box does nothing. When the
-   sidebar is collapsed the header spans the screen, so this lands the nav at
-   true screen-center; when it's open, the nav centers in the content area. */
-header[data-testid="stHeader"] .rc-overflow {
-    position: absolute !important;
-    left: 50% !important;
-    transform: translateX(-50%) !important;
-    width: max-content !important;
-    max-width: 92vw !important;
-    display: flex !important;
-    justify-content: center !important;
-    white-space: nowrap !important;
-}
+/* NOTE: top-nav centering intentionally removed. Streamlit's rc-overflow nav
+   measures available width to decide how many of the 5 section tabs fit, and
+   any attempt to reposition/resize/justify it collapsed every page into a
+   bogus "N more" overflow button. Left as Streamlit's default so the 5 section
+   dropdowns render correctly. */
 
 /* Tabs — orange active state (for in-page st.tabs, not top nav) */
 .stTabs [data-baseweb="tab-list"] {
