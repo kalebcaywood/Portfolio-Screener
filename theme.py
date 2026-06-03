@@ -416,17 +416,30 @@ header [role="tab"][aria-selected="true"] {
 
 /* ── Center the top navigation ────────────────────────────────────────────
    This Streamlit build renders the page nav inside [data-testid="stToolbar"]
-   using the rc-overflow widget, wrapped in a justify:space-between flex that
-   left-biases it. Override those containers to center the nav. */
+   using the rc-overflow widget. On Streamlit Cloud the toolbar also holds a
+   "Fork"/GitHub badge on the right, so simply centering the flex would center
+   the [nav + badge] group, not the nav. Instead we absolutely-center the nav
+   container itself so it sits at true screen-center while the badge stays at
+   the right edge. */
 header[data-testid="stHeader"] [data-testid="stToolbar"],
 header[data-testid="stHeader"] [data-testid="stToolbar"] > div {
-    justify-content: center !important;
+    position: static !important;
     width: 100% !important;
 }
+/* Shrink the nav to its content (max-content) and absolutely-center it on the
+   full-width header. width:max-content is essential — otherwise rc-overflow
+   stays stretched and "centering" a full-width box does nothing. When the
+   sidebar is collapsed the header spans the screen, so this lands the nav at
+   true screen-center; when it's open, the nav centers in the content area. */
 header[data-testid="stHeader"] .rc-overflow {
-    margin-left: auto !important;
-    margin-right: auto !important;
+    position: absolute !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: max-content !important;
+    max-width: 92vw !important;
+    display: flex !important;
     justify-content: center !important;
+    white-space: nowrap !important;
 }
 
 /* Tabs — orange active state (for in-page st.tabs, not top nav) */
@@ -529,9 +542,9 @@ a:hover {
     background: #FF8200;
     color: #ffffff;
     font-weight: 800;
-    font-size: 22px;
+    font-size: 32px;
     letter-spacing: 0.04em;
-    padding: 10px 16px;
+    padding: 14px 22px;
     border-radius: 4px;
     line-height: 1;
     font-family: 'Inter', -apple-system, sans-serif;
@@ -540,21 +553,21 @@ a:hover {
 .ut-wordmark {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 3px;
 }
 .ut-supratitle {
     color: #FF8200;
     font-weight: 700;
-    font-size: 10px;
+    font-size: 13px;
     letter-spacing: 0.22em;
     text-transform: uppercase;
 }
 .ut-title {
     color: #1a1a1a;
     font-weight: 700;
-    font-size: 22px;
-    letter-spacing: -0.015em;
-    line-height: 1.15;
+    font-size: 34px;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
 }
 
 /* Sidebar brand bar */
@@ -648,7 +661,7 @@ def ut_header(title: str = "Quantitative Portfolio Analytics",
     if data_uri:
         mark_html = (
             f'<img src="{data_uri}" alt="UT" '
-            'style="height:72px; width:auto; display:block;">'
+            'style="height:104px; width:auto; display:block;">'
         )
     else:
         mark_html = '<div class="ut-mark">UT</div>'

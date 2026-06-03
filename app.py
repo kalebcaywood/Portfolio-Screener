@@ -85,41 +85,39 @@ components.html(
   function centerNav() {
     try {
       const doc = window.parent.document;
-      const candidates = [
-        '[data-testid="stTopNav"]',
-        '[data-testid="stHeader"] nav',
-        '[data-testid="stHeader"] [role="navigation"]',
-        '[data-testid="stHeader"] [role="menubar"]',
-        '[data-testid="stHeader"] [role="tablist"]',
-        '[data-testid="stHeader"] [data-baseweb="tab-list"]',
-        'header nav',
-      ];
-      let nav = null;
-      for (const sel of candidates) {
-        nav = doc.querySelector(sel);
-        if (nav) break;
+      const header = doc.querySelector('[data-testid="stHeader"]');
+      if (!header) return false;
+      // Streamlit's top-position page nav lives in an rc-overflow container.
+      // Fall back to whichever header element holds the most <a> page links.
+      let nav = header.querySelector('.rc-overflow');
+      if (!nav) {
+        let best = null, bestN = 1;
+        header.querySelectorAll('div, ul, nav').forEach((el) => {
+          const n = el.querySelectorAll('a').length;
+          if (n > bestN) { best = el; bestN = n; }
+        });
+        nav = best;
       }
       if (!nav) return false;
-      // Style the nav itself
+      // Let the nav position against the full-width header (not the
+      // sidebar-offset toolbar): clear positioning on the toolbar wrappers,
+      // then shrink the nav to its content and absolutely-center it. Leaving
+      // it stretched would make "centering" a no-op. The Fork/GitHub badge
+      // stays at the right edge in normal flow.
+      const toolbar = header.querySelector('[data-testid="stToolbar"]');
+      if (toolbar) {
+        toolbar.style.setProperty('position', 'static', 'important');
+        const inner = toolbar.querySelector(':scope > div');
+        if (inner) inner.style.setProperty('position', 'static', 'important');
+      }
+      nav.style.setProperty('position', 'absolute', 'important');
+      nav.style.setProperty('left', '50%', 'important');
+      nav.style.setProperty('transform', 'translateX(-50%)', 'important');
+      nav.style.setProperty('width', 'max-content', 'important');
+      nav.style.setProperty('max-width', '92vw', 'important');
       nav.style.setProperty('display', 'flex', 'important');
       nav.style.setProperty('justify-content', 'center', 'important');
-      nav.style.setProperty('margin', '0 auto', 'important');
-      nav.style.setProperty('flex', '1 1 auto', 'important');
-      // Center its parent flex container too (the header)
-      let p = nav.parentElement;
-      while (p && p !== doc.body) {
-        if (window.parent.getComputedStyle(p).display === 'flex') {
-          p.style.setProperty('justify-content', 'center', 'important');
-        }
-        p = p.parentElement;
-      }
-      // Recursively center any flex children inside the nav
-      nav.querySelectorAll('*').forEach((el) => {
-        const cs = window.parent.getComputedStyle(el);
-        if (cs.display && cs.display.includes('flex')) {
-          el.style.setProperty('justify-content', 'center', 'important');
-        }
-      });
+      nav.style.setProperty('white-space', 'nowrap', 'important');
       return true;
     } catch (e) { return false; }
   }
