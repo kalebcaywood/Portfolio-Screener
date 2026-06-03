@@ -27,6 +27,14 @@ _UA = (
     "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 )
 
+# Height of the fixed ticker bar (px). The Streamlit header, sidebar, and main
+# content are offset downward by this amount so the ticker sits above the nav.
+TICKER_H = 34
+# Streamlit's default top padding on the main block container (6rem = 96px),
+# which clears the 60px header. We add TICKER_H so content still clears the
+# header after it's been pushed down by the ticker.
+_MAIN_PAD_BASE = 96
+
 
 def _fetch_feed(url: str, timeout: int = 8) -> list[dict]:
     """Fetch and parse a single RSS feed into a list of {title, link} dicts."""
@@ -109,16 +117,33 @@ def render_news_ticker(label: str = "WSJ") -> None:
     st.markdown(
         f"""
 <style>
+/* ── Ticker pinned as a full-width bar at the very top, above the nav ──
+   It's position:fixed so it overlays the very top of the viewport; the
+   Streamlit header (top nav), sidebar, and main content are each pushed
+   down by the ticker height so nothing is hidden underneath it. These
+   offsets live here (not in theme.py) so that if the feed is unreachable
+   and the ticker doesn't render, the layout stays in its normal position. */
 .news-tkr {{
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    z-index: 1000000;          /* above the Streamlit header (z 999990) */
     display: flex;
     align-items: stretch;
-    height: 34px;
-    margin: 0 0 12px 0;
+    height: {TICKER_H}px;
+    margin: 0;
     background: #ffffff;
-    border: 1px solid #e5e5e5;
-    border-left: 4px solid #FF8200;
-    border-radius: 4px;
+    border: none;
+    border-bottom: 2px solid #FF8200;
     overflow: hidden;
+}}
+/* Push the nav header, sidebar, and main content below the fixed ticker. */
+header[data-testid="stHeader"] {{ top: {TICKER_H}px !important; }}
+[data-testid="stSidebar"] {{ top: {TICKER_H}px !important; }}
+[data-testid="stMainBlockContainer"] {{
+    padding-top: {_MAIN_PAD_BASE + TICKER_H}px !important;
 }}
 .news-tkr-label {{
     flex-shrink: 0;

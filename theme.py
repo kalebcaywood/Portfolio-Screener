@@ -410,9 +410,23 @@ header [role="tab"][aria-selected="true"] {
 
 /* If the toolbar (right-side menu/decoration area) is pushing nav left,
    shrink it so the nav has room to center. */
-[data-testid="stHeader"] > div:last-child:not([data-testid*="nav" i]),
-[data-testid="stToolbar"] {
+[data-testid="stHeader"] > div:last-child:not([data-testid*="nav" i]) {
     flex: 0 0 auto !important;
+}
+
+/* ── Center the top navigation ────────────────────────────────────────────
+   This Streamlit build renders the page nav inside [data-testid="stToolbar"]
+   using the rc-overflow widget, wrapped in a justify:space-between flex that
+   left-biases it. Override those containers to center the nav. */
+header[data-testid="stHeader"] [data-testid="stToolbar"],
+header[data-testid="stHeader"] [data-testid="stToolbar"] > div {
+    justify-content: center !important;
+    width: 100% !important;
+}
+header[data-testid="stHeader"] .rc-overflow {
+    margin-left: auto !important;
+    margin-right: auto !important;
+    justify-content: center !important;
 }
 
 /* Tabs — orange active state (for in-page st.tabs, not top nav) */
