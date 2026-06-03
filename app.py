@@ -12,6 +12,7 @@ from __future__ import annotations
 import streamlit as st
 import streamlit.components.v1 as components
 
+from news import render_news_ticker
 from theme import inject_css, render_logout_button, require_password, ut_header
 
 # ─── Page config — single source of truth ────────────────────────────────────
@@ -32,6 +33,9 @@ render_logout_button()
 
 # ─── UT brand header at the top of every page ───────────────────────────────
 ut_header("Quantitative Portfolio Analytics", "University of Tennessee")
+
+# ─── Circulating WSJ headline ticker (cached 15 min; no-op if offline) ───────
+render_news_ticker()
 
 # ─── Sections ────────────────────────────────────────────────────────────────
 sections = {
