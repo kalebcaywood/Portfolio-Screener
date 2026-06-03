@@ -14,6 +14,7 @@ import streamlit.components.v1 as components
 
 from news import render_news_ticker
 from theme import inject_css, render_logout_button, require_password, ut_header
+from jarvis_assistant import render_jarvis
 
 # ─── Page config — single source of truth ────────────────────────────────────
 st.set_page_config(
@@ -75,64 +76,81 @@ sections = {
 
 pg = st.navigation(sections, position="top")
 
-# ─── Force-center the top nav via JS (CSS-only often misses Streamlit's
-#     internal selectors; this runs in an invisible iframe and uses
-#     window.parent.document to style the nav directly). ────────────────
+# ─── Header layout fixups via JS (CSS-only often misses Streamlit's internal
+#     selectors). Runs in an invisible iframe and styles window.parent.document
+#     directly: (1) center the top nav, and (2) relocate the WSJ ticker to be a
+#     direct child of <body> so its position:fixed anchors to the viewport even
+#     on Streamlit Cloud, where viewer chrome can introduce a transformed
+#     ancestor that would otherwise trap a fixed element back into the flow. ──
 components.html(
     """
 <script>
 (function () {
+  const PDOC = () => window.parent.document;
+
   function centerNav() {
-    try {
-      const doc = window.parent.document;
-      const header = doc.querySelector('[data-testid="stHeader"]');
-      if (!header) return false;
-      // Streamlit's top-position page nav lives in an rc-overflow container.
-      // Fall back to whichever header element holds the most <a> page links.
-      let nav = header.querySelector('.rc-overflow');
-      if (!nav) {
-        let best = null, bestN = 1;
-        header.querySelectorAll('div, ul, nav').forEach((el) => {
-          const n = el.querySelectorAll('a').length;
-          if (n > bestN) { best = el; bestN = n; }
-        });
-        nav = best;
-      }
-      if (!nav) return false;
-      // Let the nav position against the full-width header (not the
-      // sidebar-offset toolbar): clear positioning on the toolbar wrappers,
-      // then shrink the nav to its content and absolutely-center it. Leaving
-      // it stretched would make "centering" a no-op. The Fork/GitHub badge
-      // stays at the right edge in normal flow.
-      const toolbar = header.querySelector('[data-testid="stToolbar"]');
-      if (toolbar) {
-        toolbar.style.setProperty('position', 'static', 'important');
-        const inner = toolbar.querySelector(':scope > div');
-        if (inner) inner.style.setProperty('position', 'static', 'important');
-      }
-      nav.style.setProperty('position', 'absolute', 'important');
-      nav.style.setProperty('left', '50%', 'important');
-      nav.style.setProperty('transform', 'translateX(-50%)', 'important');
-      nav.style.setProperty('width', 'max-content', 'important');
-      nav.style.setProperty('max-width', '92vw', 'important');
-      nav.style.setProperty('display', 'flex', 'important');
-      nav.style.setProperty('justify-content', 'center', 'important');
-      nav.style.setProperty('white-space', 'nowrap', 'important');
-      return true;
-    } catch (e) { return false; }
+    const doc = PDOC();
+    const header = doc.querySelector('[data-testid="stHeader"]');
+    if (!header) return;
+    // Streamlit's top-position page nav lives in an rc-overflow container.
+    // Fall back to whichever header element holds the most <a> page links.
+    let nav = header.querySelector('.rc-overflow');
+    if (!nav) {
+      let best = null, bestN = 1;
+      header.querySelectorAll('div, ul, nav').forEach((el) => {
+        const n = el.querySelectorAll('a').length;
+        if (n > bestN) { best = el; bestN = n; }
+      });
+      nav = best;
+    }
+    if (!nav) return;
+    // Position the nav against the full-width header (not the sidebar-offset
+    // toolbar): clear positioning on the toolbar wrappers, then shrink the nav
+    // to its content and absolutely-center it. Leaving it stretched would make
+    // "centering" a no-op. The Fork/GitHub badge stays at the right edge.
+    const toolbar = header.querySelector('[data-testid="stToolbar"]');
+    if (toolbar) {
+      toolbar.style.setProperty('position', 'static', 'important');
+      const inner = toolbar.querySelector(':scope > div');
+      if (inner) inner.style.setProperty('position', 'static', 'important');
+    }
+    nav.style.setProperty('position', 'absolute', 'important');
+    nav.style.setProperty('left', '50%', 'important');
+    nav.style.setProperty('transform', 'translateX(-50%)', 'important');
+    nav.style.setProperty('width', 'max-content', 'important');
+    nav.style.setProperty('max-width', '92vw', 'important');
+    nav.style.setProperty('display', 'flex', 'important');
+    nav.style.setProperty('justify-content', 'center', 'important');
+    nav.style.setProperty('white-space', 'nowrap', 'important');
   }
 
-  // Try immediately, then watch for DOM mutations (Streamlit re-renders often)
-  let done = false;
-  const tryIt = () => { if (!done && centerNav()) { done = true; } };
-  tryIt();
-  if (!done) {
-    const obs = new MutationObserver(tryIt);
-    obs.observe(window.parent.document.body, { childList: true, subtree: true });
-    setTimeout(() => obs.disconnect(), 8000);
+  function relocateTicker() {
+    const doc = PDOC();
+    const all = doc.querySelectorAll('.news-tkr');
+    if (!all.length) return;
+    // Streamlit re-renders may recreate the ticker inside the (possibly
+    // transformed) main block. Keep the newest, drop stale duplicates, and
+    // hoist it to <body> so position:fixed pins it to the very top.
+    const keep = all[all.length - 1];
+    all.forEach((t) => { if (t !== keep && t.parentElement) t.parentElement.removeChild(t); });
+    if (keep.parentElement !== doc.body) {
+      doc.body.appendChild(keep);
+    }
   }
-  // Re-apply periodically in case Streamlit re-renders the nav
-  setInterval(centerNav, 1500);
+
+  let obs = null;
+  function apply() {
+    // Disconnect while mutating so our own DOM edits don't re-trigger us.
+    if (obs) obs.disconnect();
+    try { centerNav(); relocateTicker(); } catch (e) {}
+    if (obs) obs.observe(PDOC().body, { childList: true, subtree: true });
+  }
+
+  apply();
+  obs = new MutationObserver(apply);
+  obs.observe(PDOC().body, { childList: true, subtree: true });
+  // Safety re-apply in case a re-render slips through between observer cycles.
+  setInterval(apply, 1000);
 })();
 </script>
 """,
@@ -140,3 +158,6 @@ components.html(
 )
 
 pg.run()
+
+# ─── Floating Jarvis assistant (circular button, bottom-right of every page) ──
+render_jarvis()

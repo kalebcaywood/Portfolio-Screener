@@ -48,6 +48,15 @@ private_*.csv
 position_breakdown.csv
 screener_results.csv
 
+# ─── Trading bot code + live financial data (privacy) ────────────────────────
+# This is a PUBLIC repo. trading_bot/ holds account snapshots, positions, P&L,
+# and trade logs — never commit it here. Jarvis reads it at runtime locally and
+# degrades gracefully (reports "no trading data") when it's absent on the host.
+trading_bot/
+
+# ─── Secrets ─────────────────────────────────────────────────────────────────
+.streamlit/secrets.toml
+
 # ─── OS / misc ───────────────────────────────────────────────────────────────
 *.bak
 *.tmp
