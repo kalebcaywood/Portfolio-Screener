@@ -2,6 +2,7 @@ streamlit>=1.43,<1.58  # pin to the 1.57.x line the layout/nav CSS was verified 
 yfinance>=0.2.40
 curl_cffi>=0.7  # browser impersonation for yfinance so Yahoo doesn't rate-limit cloud IPs
 anthropic>=0.40  # powers the in-app Jarvis assistant (needs ANTHROPIC_API_KEY secret)
+pillow>=10  # downscales the password-screen background image
 pandas>=2.0
 numpy>=1.24
 plotly>=5.18

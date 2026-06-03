@@ -28,21 +28,51 @@ def require_password() -> None:
     if st.session_state.get("authenticated", False):
         return
 
-    # Minimal CSS for a clean centered gate
+    bg = _login_bg_data_uri()
+    logo = _logo_data_uri()
+
+    # Full-screen backdrop: the user's image (under a dark scrim so the white
+    # card and text stay readable over any photo), or a soft solid fallback
+    # when no background image has been dropped into assets/ yet.
+    if bg:
+        backdrop = (
+            f'[data-testid="stAppViewContainer"], .stApp {{'
+            f'  background-image: linear-gradient(rgba(8,12,20,0.45), rgba(8,12,20,0.62)), url("{bg}");'
+            f'  background-size: cover;'
+            f'  background-position: center;'
+            f'  background-repeat: no-repeat;'
+            f'}}'
+        )
+    else:
+        backdrop = 'body, .stApp { background: #f7f7f5; }'
+
+    # Brand mark inside the card: real Power T if available, else CSS "UT" box.
+    mark_html = (
+        f'<img src="{logo}" alt="UT" style="height:66px;width:auto;display:block;margin-bottom:10px;">'
+        if logo else '<div class="gate-mark">UT</div>'
+    )
+
     st.markdown(
-        """
+        f"""
 <style>
-body { background: #f7f7f5; }
-.gate-wrap {
-    max-width: 380px;
-    margin: 12vh auto 0 auto;
-    padding: 32px 32px 28px 32px;
-    background: white;
-    border: 1px solid #e5e5e5;
-    border-radius: 8px;
+{backdrop}
+/* Keep Streamlit's header out of the way for a clean full-screen gate */
+[data-testid="stHeader"] {{ background: transparent !important; }}
+[data-testid="stToolbar"] {{ display: none !important; }}
+
+/* Glassy login card, centered over the backdrop */
+.st-key-gate_card {{
+    max-width: 420px;
+    margin: 10vh auto 0 auto;
+    padding: 34px 34px 26px 34px;
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-radius: 12px;
     border-top: 4px solid #FF8200;
-}
-.gate-mark {
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+}}
+.gate-mark {{
     background: #FF8200;
     color: white;
     font-weight: 800;
@@ -52,52 +82,48 @@ body { background: #f7f7f5; }
     display: inline-block;
     letter-spacing: 0.05em;
     line-height: 1;
-}
-.gate-title {
-    font-weight: 700;
-    font-size: 22px;
-    color: #1a1a1a;
-    letter-spacing: -0.015em;
-    margin: 18px 0 4px 0;
-}
-.gate-supra {
+    margin-bottom: 10px;
+}}
+.gate-supra {{
     color: #FF8200;
     font-weight: 700;
     font-size: 10px;
     letter-spacing: 0.22em;
     text-transform: uppercase;
-}
-.gate-caption {
+}}
+.gate-title {{
+    font-weight: 700;
+    font-size: 23px;
+    color: #1a1a1a;
+    letter-spacing: -0.015em;
+    margin: 4px 0 4px 0;
+}}
+.gate-caption {{
     color: #58595B;
     font-size: 13px;
-    margin: 4px 0 18px 0;
-}
+    margin: 4px 0 16px 0;
+}}
 </style>
         """,
         unsafe_allow_html=True,
     )
 
-    # Render gate inside a centered card
-    st.markdown(
-        """
-<div class="gate-wrap">
-  <div class="gate-mark">UT</div>
-  <div class="gate-supra" style="margin-top:14px;">University of Tennessee</div>
-  <div class="gate-title">Quantitative Portfolio Analytics</div>
-  <div class="gate-caption">Access required. Enter password to continue.</div>
-</div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    # Centered input via columns
-    c1, c2, c3 = st.columns([1, 1.2, 1])
-    with c2:
+    # Everything (brand header + form) lives inside one keyed container so the
+    # CSS above can render it as a single floating card.
+    with st.container(key="gate_card"):
+        st.markdown(
+            f"""
+<div>{mark_html}</div>
+<div class="gate-supra">University of Tennessee</div>
+<div class="gate-title">Quantitative Portfolio Analytics</div>
+<div class="gate-caption">Access required. Enter password to continue.</div>
+            """,
+            unsafe_allow_html=True,
+        )
         with st.form("auth_form", clear_on_submit=False, border=False):
             pw = st.text_input("Password", type="password", label_visibility="collapsed",
                                  placeholder="Password")
-            submitted = st.form_submit_button("Sign in", type="primary",
-                                                  width="stretch")
+            submitted = st.form_submit_button("Sign in", type="primary", width="stretch")
         if submitted:
             attempt = hashlib.sha256(pw.encode("utf-8")).hexdigest()
             if attempt == _PASSWORD_HASH:
@@ -155,6 +181,45 @@ def _encode_image(path: Path) -> str | None:
         return f"data:{mime};base64,{encoded}"
     except Exception:
         return None
+
+
+# Background image for the password screen. Drop a file named login_bg.<ext>
+# (or background.<ext>) into assets/ and it becomes the full-screen backdrop.
+_BG_CANDIDATES = [
+    "login_bg.jpg", "login_bg.jpeg", "login_bg.png", "login_bg.webp",
+    "background.jpg", "background.jpeg", "background.png", "background.webp",
+    "login.jpg", "login.jpeg", "login.png", "login.webp",
+]
+
+
+def _login_bg_data_uri(max_w: int = 1920, quality: int = 82) -> str | None:
+    """Return a base64 data URI for the password-screen background, if present.
+
+    The image is embedded directly in the page, so we downscale/recompress it
+    (max 1920px wide, JPEG q82) to keep the gate fast even if a large photo is
+    dropped in. Falls back to the raw file if Pillow isn't available.
+    """
+    if not _ASSETS_DIR.exists():
+        return None
+    for name in _BG_CANDIDATES:
+        path = _ASSETS_DIR / name
+        if not (path.exists() and path.is_file()):
+            continue
+        try:
+            import io
+
+            from PIL import Image
+
+            img = Image.open(path).convert("RGB")
+            if img.width > max_w:
+                img = img.resize((max_w, round(img.height * max_w / img.width)))
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=quality, optimize=True)
+            b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+            return f"data:image/jpeg;base64,{b64}"
+        except Exception:
+            return _encode_image(path)  # raw fallback (no resize)
+    return None
 
 # ─── University of Tennessee brand colors ────────────────────────────────────
 UT_ORANGE     = "#FF8200"   # Tennessee Orange (primary)
