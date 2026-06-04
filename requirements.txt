@@ -1,11 +1,15 @@
+# NOTE: upper bounds are intentional. Unpinned deps let Streamlit Cloud pull
+# numpy 2.x / pandas 3.x on rebuild, whose ABI/breaking changes crash the
+# pandas (and scipy) import at runtime — surfacing as an ImportError on the
+# first module that imports pandas. Keep this a coherent numpy-1.x stack.
 streamlit>=1.43,<1.58  # pin to the 1.57.x line the layout/nav CSS was verified against
 yfinance>=0.2.40
 curl_cffi>=0.7  # browser impersonation for yfinance so Yahoo doesn't rate-limit cloud IPs
 anthropic>=0.40  # powers the in-app Jarvis assistant (needs ANTHROPIC_API_KEY secret)
-pillow>=10  # downscales the password-screen background image
-pandas>=2.0
-numpy>=1.24
-plotly>=5.18
-scipy>=1.11
-statsmodels>=0.14
-scikit-learn>=1.3
+pillow>=10,<11  # downscales the password-screen background image
+numpy>=1.24,<2.0  # <2.0: numpy 2.x ABI break crashes pandas/scipy import on Cloud
+pandas>=2.0,<2.3
+plotly>=5.18,<6
+scipy>=1.11,<1.14
+statsmodels>=0.14,<0.15
+scikit-learn>=1.3,<1.6
