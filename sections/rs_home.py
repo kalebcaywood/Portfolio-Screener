@@ -16,10 +16,11 @@ import streamlit as st
 
 import rsa as RS
 from theme import inject_css
+from theme import page_header
 
 inject_css()
 
-st.title("Return Stream Analyzer")
+page_header("Return Stream Analyzer")
 st.caption(
     "Upload pure return time series (no holdings required). Auto-detects format "
     "and frequency. Once loaded, every RSA tab reads from this same data."

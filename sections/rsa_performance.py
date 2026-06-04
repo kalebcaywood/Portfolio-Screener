@@ -10,9 +10,10 @@ import streamlit as st
 import analytics as A
 from data import benchmark_picker_and_data, portfolio_returns, require_portfolio
 from theme import inject_css
+from theme import page_header
 
 inject_css()
-st.title("Portfolio Performance")
+page_header("Portfolio Performance")
 st.caption("Risk-adjusted returns, drawdown analysis, and benchmark-relative metrics.")
 
 tickers, weights, prices, returns, _, _, rf = require_portfolio()

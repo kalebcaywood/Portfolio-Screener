@@ -10,9 +10,10 @@ import streamlit as st
 import optimization as O
 from data import require_portfolio
 from theme import inject_css
+from theme import page_header
 
 inject_css()
-st.title("Portfolio Optimization")
+page_header("Portfolio Optimization")
 st.caption("Modern Portfolio Theory: efficient frontier, max-Sharpe, min-variance, Equal Risk Contribution.")
 
 tickers, weights, prices, returns, bench_prices, bench_returns, rf = require_portfolio()

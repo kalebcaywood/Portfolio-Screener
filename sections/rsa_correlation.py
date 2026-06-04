@@ -9,11 +9,12 @@ import streamlit as st
 
 from data import benchmark_picker_and_data, require_portfolio
 from theme import inject_css
+from theme import page_header
 from scipy.cluster.hierarchy import linkage, fcluster
 from scipy.spatial.distance import squareform
 
 inject_css()
-st.title("Correlation & Co-movement Analysis")
+page_header("Correlation & Co-movement Analysis")
 st.caption("Pairwise correlations, rolling co-movement, and hierarchical clustering of return patterns.")
 
 tickers, weights, prices, returns, _, _, rf = require_portfolio()

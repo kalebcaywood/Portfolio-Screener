@@ -15,9 +15,10 @@ import streamlit as st
 import bloomberg as BB
 from data import fetch_sector
 from theme import COLORWAY, inject_css
+from theme import page_header
 
 inject_css()
-st.title("Fund Holdings Analyzer")
+page_header("Fund Holdings Analyzer")
 st.caption(
     "Upload a Bloomberg-format multi-fund holdings file (Fund, Ticker, Quantity, "
     "Market Value). Geographic and concentration breakdowns run on the full file; "

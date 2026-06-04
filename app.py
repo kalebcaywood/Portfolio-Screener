@@ -13,7 +13,13 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from news import render_news_ticker
-from theme import inject_css, render_logout_button, require_password, ut_header
+from theme import (
+    inject_css,
+    render_logout_button,
+    render_theme_toggle,
+    require_password,
+    ut_header,
+)
 from jarvis_assistant import render_jarvis
 
 # ─── Page config — single source of truth ────────────────────────────────────
@@ -31,6 +37,9 @@ inject_css()
 
 # Optional sign-out link in the sidebar (always shown post-auth)
 render_logout_button()
+
+# Dark / Light appearance toggle (sidebar, top)
+render_theme_toggle()
 
 # ─── UT brand header at the top of every page ───────────────────────────────
 ut_header("Quantitative Portfolio Analytics", "University of Tennessee")

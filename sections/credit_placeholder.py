@@ -4,9 +4,10 @@ from __future__ import annotations
 import streamlit as st
 
 from theme import inject_css
+from theme import page_header
 
 inject_css()
-st.title("Credit Analyzer")
+page_header("Credit Analyzer")
 st.caption("Fixed-income and credit analytics — coming soon.")
 
 st.markdown(

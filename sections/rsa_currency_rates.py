@@ -11,9 +11,10 @@ from data import (BOND_ETFS, CURRENCY_TO_FX, FX_PAIRS, RATE_INDICATORS,
                    benchmark_picker_and_data, fetch_currency_map,
                    fetch_prices, require_portfolio)
 from theme import inject_css
+from theme import page_header
 
 inject_css()
-st.title("Currency Risk & Interest Rates")
+page_header("Currency Risk & Interest Rates")
 st.caption("Currency exposure of your holdings, FX-impact attribution on returns, and global rate / FX dashboards.")
 
 tickers, weights, prices, returns, _, _, rf = require_portfolio()

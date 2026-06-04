@@ -16,12 +16,12 @@ import streamlit as st
 from data import format_market_cap
 from portfolio_input import clean_ticker, is_valid_ticker
 from screener import dividend_yield_decimal, fetch_financials, fetch_history, fetch_info
-from theme import inject_css
+from theme import inject_css, page_header
 
 inject_css()
 
-st.title("Equity Tearsheet")
-st.caption("Single-equity research debrief — description, classification, valuation, financials, and price action.")
+page_header("Equity Tearsheet",
+            "Single-equity research debrief — description, classification, valuation, financials, and price action.")
 
 # ─── Ticker entry ────────────────────────────────────────────────────────────
 st.sidebar.header("Ticker")

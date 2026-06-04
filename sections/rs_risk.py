@@ -17,10 +17,11 @@ import risk as R
 import rsa as RS
 from data import benchmark_picker_and_data
 from theme import inject_css
+from theme import page_header
 
 inject_css()
 
-st.title("Risk Metrics")
+page_header("Risk Metrics")
 st.caption("VaR, CVaR, tail-risk diagnostics, and drawdown analytics for the selected return stream.")
 
 # ─── Guard + selection ──────────────────────────────────────────────────────

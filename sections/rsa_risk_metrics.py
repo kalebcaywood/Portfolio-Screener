@@ -10,9 +10,10 @@ import streamlit as st
 import risk as R
 from data import benchmark_picker_and_data, portfolio_returns, require_portfolio
 from theme import inject_css
+from theme import page_header
 
 inject_css()
-st.title("Risk Metrics")
+page_header("Risk Metrics")
 st.caption("Value-at-Risk, Conditional VaR, component risk contribution, diversification.")
 
 tickers, weights, prices, returns, _, _, rf = require_portfolio()

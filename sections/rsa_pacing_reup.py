@@ -24,9 +24,10 @@ import analytics as A
 import factor_models as FM
 from data import benchmark_picker_and_data, portfolio_returns, require_portfolio
 from theme import REC_PALETTE, badge, inject_css, style_recommendation_column
+from theme import page_header
 
 inject_css()
-st.title("Commitment Pacing & Reup / Pullback Decisions")
+page_header("Commitment Pacing & Reup / Pullback Decisions")
 st.caption(
     "Track each position's vintage-to-date performance, get composite reup signals "
     "with statistical backing, and estimate forward probabilities via bootstrap."

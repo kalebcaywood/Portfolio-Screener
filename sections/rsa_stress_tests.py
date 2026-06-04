@@ -9,9 +9,10 @@ import streamlit as st
 import risk as R
 from data import benchmark_picker_and_data, require_portfolio
 from theme import inject_css
+from theme import page_header
 
 inject_css()
-st.title("Stress Tests")
+page_header("Stress Tests")
 st.caption("Replay historical crises and apply custom return shocks to gauge portfolio resilience.")
 
 tickers, weights, prices, returns, _, _, rf = require_portfolio()

@@ -314,6 +314,37 @@ pio.templates["quantlab"] = go.layout.Template(
         ),
     )
 )
+
+# Light counterpart — same brand colorway, light-appropriate text/grid/hover.
+pio.templates["quantlab_light"] = go.layout.Template(
+    layout=dict(
+        font=dict(family="Inter, -apple-system, BlinkMacSystemFont, sans-serif",
+                   size=12, color="#1a1a1a"),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        colorway=COLORWAY,
+        title=dict(font=dict(family="Inter", size=14, color="#1a1a1a"),
+                   x=0.0, xanchor="left", pad=dict(l=4, t=8)),
+        xaxis=dict(gridcolor="#e5e5e5", linecolor="#e5e5e5", zerolinecolor="#e5e5e5",
+                   tickfont=dict(size=11, color="#58595B"),
+                   title=dict(font=dict(size=12, color="#1a1a1a")),
+                   showline=True, mirror=False),
+        yaxis=dict(gridcolor="#e5e5e5", linecolor="#e5e5e5", zerolinecolor="#e5e5e5",
+                   tickfont=dict(size=11, color="#58595B"),
+                   title=dict(font=dict(size=12, color="#1a1a1a")),
+                   showline=True, mirror=False),
+        legend=dict(font=dict(size=11, color="#1a1a1a"),
+                    bgcolor="rgba(255,255,255,0.9)", bordercolor="#e5e5e5", borderwidth=1,
+                    orientation="h", y=-0.2, x=0),
+        hoverlabel=dict(font=dict(family="Inter", size=12, color="#1a1a1a"),
+                        bgcolor="white", bordercolor=UT_ORANGE),
+        margin=dict(t=50, b=50, l=60, r=20),
+        colorscale=dict(
+            sequential=[[0, "#fff4e6"], [0.5, "#ffb04d"], [1, UT_ORANGE]],
+            diverging=[[0, "#b91c1c"], [0.5, "#ffffff"], [1, UT_ORANGE]],
+        ),
+    )
+)
 pio.templates.default = "plotly_dark+quantlab"
 
 
@@ -743,13 +774,159 @@ a:hover {
     border-radius: 4px;
     padding: 1px 5px;
 }
+
+/* Unified page header (title + subtitle + orange rule) */
+.pg-header { margin: 0 0 1.1rem 0; }
+.pg-title {
+    font-size: 26px; font-weight: 700; color: #F2F5FA;
+    letter-spacing: -0.02em; line-height: 1.15;
+}
+.pg-sub { font-size: 13px; color: #8A95AB; margin-top: 3px; max-width: 70ch; }
+.pg-rule {
+    height: 2px; margin-top: 11px; border-radius: 1px;
+    background: linear-gradient(90deg, #FF8200 0, #FF8200 72px, #26314A 72px, #26314A 100%);
+}
+
+/* Tighter vertical rhythm — denser, more terminal-like */
+[data-testid="stMainBlockContainer"] [data-testid="stVerticalBlock"] { gap: 0.85rem; }
 </style>
 """
 
 
+# ─── Light-mode override (injected on top of the dark base) ──────────────────
+# The dark theme is the native config.toml base. Light mode is an opt-in CSS
+# layer that re-skins every CSS-stylable element. NOTE: Streamlit's data grids
+# (st.dataframe / st.data_editor) paint to a <canvas> themed from config.toml
+# and cannot be repainted by CSS, so they stay dark in light mode — we frame
+# them as intentional dark "data panels".
+_LIGHT_CSS = """
+<style>
+/* Canvas + main surfaces */
+.stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"],
+[data-testid="stMainBlockContainer"], [data-testid="stHeader"] {
+    background-color: #FAFAF7 !important;
+}
+[data-testid="stSidebar"] { background-color: #F1F1ED !important; }
+
+/* Text */
+.stApp h1, .ut-title { color: #1a1a1a !important; }
+.stApp h2 { color: #1a1a1a !important; }
+.stApp h3 { color: #2a2a2a !important; }
+.stApp p, .stApp li, .stApp label, .stApp span:not(.qbadge):not(.news-tkr-sep),
+[data-testid="stMarkdownContainer"] { color: #1f2937 !important; }
+[data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p { color: #58595B !important; }
+
+/* Metric cards */
+[data-testid="stMetric"] {
+    background: #ffffff !important;
+    border-color: #E3E3DE !important;
+    border-left-color: #d8d8d2 !important;
+}
+[data-testid="stMetric"]:hover { border-left-color: #FF8200 !important; box-shadow: 0 4px 14px rgba(0,0,0,0.08) !important; }
+[data-testid="stMetricLabel"] { color: #58595B !important; }
+[data-testid="stMetricValue"] { color: #1a1a1a !important; }
+
+/* Sidebar brand text */
+.ut-sidebar-text { color: #58595B !important; }
+
+/* Expanders */
+[data-testid="stExpander"] { background: #ffffff !important; border-color: #E3E3DE !important; }
+
+/* Inputs / selects */
+.stTextInput input, .stNumberInput input, .stTextArea textarea,
+[data-baseweb="select"] > div, [data-baseweb="input"] > div {
+    background: #ffffff !important; color: #1a1a1a !important; border-color: #cbd5e1 !important;
+}
+[data-baseweb="popover"], [role="listbox"], [data-baseweb="menu"] {
+    background: #ffffff !important; color: #1a1a1a !important;
+}
+
+/* Secondary buttons (primary stays orange) */
+.stButton button:not([kind="primary"]) {
+    background: #ffffff !important; color: #1a1a1a !important; border-color: #d8d8d2 !important;
+}
+
+/* Tabs */
+.stTabs [data-baseweb="tab-list"] { border-bottom-color: #e5e5e5 !important; }
+.stTabs [data-baseweb="tab"] { color: #58595B !important; }
+.stTabs [aria-selected="true"] { color: #FF8200 !important; }
+
+/* Nav */
+[data-testid="stTopNav"] a, header nav a, header [role="tab"] { color: #1a1a1a !important; }
+
+/* Status bar */
+.qstatus { background: #f7f7f5 !important; border-color: #e5e5e5 !important; color: #58595B !important; }
+.qstatus .qstatus-key { color: #888888 !important; }
+.qstatus .qstatus-val { color: #1a1a1a !important; }
+
+/* Alerts */
+.stAlert { background: #fff7ed !important; }
+
+/* Dividers */
+hr, [data-testid="stDivider"] hr { border-color: #e5e5e5 !important; }
+
+/* Code */
+.stApp code { background: #fff4e6 !important; color: #c25e00 !important; border-color: #ffd7a8 !important; }
+
+/* Badges → light pastels */
+.qbadge-reup, .qbadge-low, .qbadge-success { background: #dcfce7 !important; color: #15803d !important; border-color: #bbf7d0 !important; }
+.qbadge-add, .qbadge-info { background: #fff4e6 !important; color: #c25e00 !important; border-color: #ffd7a8 !important; }
+.qbadge-hold, .qbadge-neutral { background: #f1f5f9 !important; color: #58595B !important; border-color: #e5e5e5 !important; }
+.qbadge-trim, .qbadge-medium, .qbadge-warning { background: #fef3c7 !important; color: #b45309 !important; border-color: #fde68a !important; }
+.qbadge-exit, .qbadge-high, .qbadge-danger { background: #fee2e2 !important; color: #b91c1c !important; border-color: #fecaca !important; }
+
+/* WSJ ticker → light */
+.news-tkr { background: #ffffff !important; border-bottom-color: #e5e5e5 !important; box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important; }
+.news-tkr-track a { color: #1a1a1a !important; }
+
+/* Data grids stay dark (canvas) — frame them as intentional panels */
+[data-testid="stDataFrame"], [data-testid="stDataFrameResizable"] {
+    border: 1px solid #cdd3da !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06) !important;
+}
+
+/* Page header in light mode */
+.pg-title { color: #1a1a1a !important; }
+.pg-sub { color: #58595B !important; }
+.pg-rule { background: linear-gradient(90deg, #FF8200 0, #FF8200 72px, #e5e5e5 72px, #e5e5e5 100%) !important; }
+</style>
+"""
+
+
+def _ui_theme() -> str:
+    """Active UI theme: 'dark' (default, native) or 'light' (CSS overlay)."""
+    return st.session_state.get("ui_theme", "dark")
+
+
 def inject_css() -> None:
-    """Inject the global CSS. Call once per page after st.set_page_config."""
+    """Inject the global CSS. Call once per page after st.set_page_config.
+
+    Dark is the native base (config.toml). When the user picks Light, an
+    override layer is added and the Plotly default template is swapped.
+    """
     st.markdown(_CSS, unsafe_allow_html=True)
+    if _ui_theme() == "light":
+        st.markdown(_LIGHT_CSS, unsafe_allow_html=True)
+        pio.templates.default = "plotly_white+quantlab_light"
+    else:
+        pio.templates.default = "plotly_dark+quantlab"
+
+
+def render_theme_toggle() -> None:
+    """Sidebar Dark/Light switch. Call once (e.g. in app.py) after auth."""
+    if not st.session_state.get("authenticated", False):
+        return
+    cur = _ui_theme()
+    with st.sidebar:
+        choice = st.radio(
+            "Appearance", ["Dark", "Light"],
+            index=0 if cur == "dark" else 1,
+            horizontal=True,
+        )
+    new = "light" if choice == "Light" else "dark"
+    if new != cur:
+        st.session_state["ui_theme"] = new
+        st.rerun()
 
 
 def setup_page(title: str, layout: str = "wide") -> None:
@@ -780,6 +957,22 @@ def ut_header(title: str = "Quantitative Portfolio Analytics",
     </div>
 </div>
 """,
+        unsafe_allow_html=True,
+    )
+
+
+def page_header(title: str, subtitle: str = "") -> None:
+    """Unified page header: title + optional one-line subtitle + thin orange rule.
+
+    Drop-in replacement for the ``st.title(...) / st.caption(...)`` pattern so
+    every analytics page opens with the same rhythm. Theme-aware (light/dark).
+    """
+    import html as _html
+    sub = f'<div class="pg-sub">{_html.escape(subtitle)}</div>' if subtitle else ""
+    st.markdown(
+        f'<div class="pg-header">'
+        f'<div class="pg-title">{_html.escape(title)}</div>{sub}'
+        f'<div class="pg-rule"></div></div>',
         unsafe_allow_html=True,
     )
 

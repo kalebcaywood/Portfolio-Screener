@@ -10,9 +10,10 @@ import streamlit as st
 import factor_models as FM
 from data import benchmark_picker_and_data, FACTOR_PROXIES, fetch_prices, portfolio_returns, require_portfolio
 from theme import inject_css
+from theme import page_header
 
 inject_css()
-st.title("Factor Models")
+page_header("Factor Models")
 st.caption("CAPM and custom multi-factor OLS with full regression statistics.")
 
 tickers, weights, prices, returns, _, _, rf = require_portfolio()

@@ -8,7 +8,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from data import format_market_cap
-from theme import inject_css
+from theme import inject_css, page_header
 from screener import compute_portfolio, fetch_history, returns_from_prices
 from scoring import composite_score
 
@@ -42,10 +42,10 @@ def fmt(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-st.title("Equity Screener")
-st.caption(
-    "Fundamental, technical, and composite-factor screening. US and foreign "
-    "equities both supported. Data via yfinance."
+page_header(
+    "Universal Equity Screener",
+    "Fundamental, technical, and composite-factor screening — US and foreign "
+    "equities. Data via yfinance.",
 )
 
 # Use tickers from session state if available, else show a diverse default

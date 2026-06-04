@@ -14,9 +14,10 @@ from data import (FACTOR_PROXIES, benchmark_picker_and_data,
                    fetch_currency_map, fetch_prices,
                    portfolio_returns, require_portfolio)
 from theme import badge, inject_css
+from theme import page_header
 
 inject_css()
-st.title("Risk Decomposition & Improvement Suggestions")
+page_header("Risk Decomposition & Improvement Suggestions")
 st.caption(
     "Splits portfolio risk into **systematic** (market-driven) vs **idiosyncratic** "
     "(stock-specific) components, surfaces concentration / tail / correlation issues, "

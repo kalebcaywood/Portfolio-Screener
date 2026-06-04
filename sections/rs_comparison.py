@@ -14,10 +14,11 @@ import streamlit as st
 import rsa as RS
 from data import benchmark_picker_and_data
 from theme import inject_css
+from theme import page_header
 
 inject_css()
 
-st.title("Stream Comparison")
+page_header("Stream Comparison")
 st.caption("Compare every uploaded return stream side by side.")
 
 if "rsa_returns" not in st.session_state:

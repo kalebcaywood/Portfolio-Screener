@@ -17,10 +17,11 @@ from scipy import stats as sps
 import rsa as RS
 from data import benchmark_picker_and_data
 from theme import inject_css
+from theme import page_header
 
 inject_css()
 
-st.title("Performance & Risk")
+page_header("Performance & Risk")
 st.caption("Per-stream analytics for a single return series, with optional benchmark comparison.")
 
 # ─── Guard: must have uploaded returns ───────────────────────────────────────

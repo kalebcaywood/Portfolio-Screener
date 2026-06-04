@@ -17,10 +17,11 @@ import factor_models as FM
 import rsa as RS
 from data import FACTOR_PROXIES, benchmark_picker_and_data, fetch_prices
 from theme import inject_css
+from theme import page_header
 
 inject_css()
 
-st.title("Factor Models")
+page_header("Factor Models")
 st.caption("CAPM and custom multi-factor OLS for return streams. Frequency-aligned to your data.")
 
 if "rsa_returns" not in st.session_state:

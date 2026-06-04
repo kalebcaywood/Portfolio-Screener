@@ -19,10 +19,11 @@ import rsa as RS
 import stats_tests as ST
 from data import benchmark_picker_and_data
 from theme import inject_css
+from theme import page_header
 
 inject_css()
 
-st.title("Statistical Tests")
+page_header("Statistical Tests")
 st.caption(
     "Distribution, stationarity, autocorrelation, heteroscedasticity, and "
     "rolling-window diagnostics for a single return stream."
