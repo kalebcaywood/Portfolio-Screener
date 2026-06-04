@@ -16,10 +16,13 @@ import streamlit as st
 
 # Public WSJ / Dow Jones RSS endpoints. Markets first — most relevant for a
 # portfolio-analytics audience — then Business and Tech for breadth.
+# Dow Jones moved the public WSJ RSS feeds off feeds.a.dj.com (those froze in
+# Jan 2025 and now serve a stale cached snapshot) to feeds.content.dowjones.io.
+# The new host carries the same feed names (no .xml suffix) and updates live.
 WSJ_FEEDS: dict[str, str] = {
-    "Markets": "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
-    "Business": "https://feeds.a.dj.com/rss/WSJcomUSBusiness.xml",
-    "Technology": "https://feeds.a.dj.com/rss/RSSWSJD.xml",
+    "Markets": "https://feeds.content.dowjones.io/public/rss/RSSMarketsMain",
+    "Business": "https://feeds.content.dowjones.io/public/rss/WSJcomUSBusiness",
+    "Technology": "https://feeds.content.dowjones.io/public/rss/RSSWSJD",
 }
 
 _UA = (
