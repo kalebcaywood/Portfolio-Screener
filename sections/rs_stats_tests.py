@@ -138,17 +138,17 @@ with tabs[2]:
         with c1:
             fig = go.Figure()
             fig.add_bar(x=list(range(len(acf_vals))), y=acf_vals, name="ACF",
-                          marker_color="#1e40af")
-            fig.add_hline(y=ci, line_dash="dash", line_color="#b91c1c")
-            fig.add_hline(y=-ci, line_dash="dash", line_color="#b91c1c")
+                          marker_color="#5BA8E8")
+            fig.add_hline(y=ci, line_dash="dash", line_color="#FB7185")
+            fig.add_hline(y=-ci, line_dash="dash", line_color="#FB7185")
             fig.update_layout(title="Autocorrelation function (ACF)")
             st.plotly_chart(fig, width="stretch")
         with c2:
             fig = go.Figure()
             fig.add_bar(x=list(range(len(pacf_vals))), y=pacf_vals, name="PACF",
                           marker_color="#0891b2")
-            fig.add_hline(y=ci, line_dash="dash", line_color="#b91c1c")
-            fig.add_hline(y=-ci, line_dash="dash", line_color="#b91c1c")
+            fig.add_hline(y=ci, line_dash="dash", line_color="#FB7185")
+            fig.add_hline(y=-ci, line_dash="dash", line_color="#FB7185")
             fig.update_layout(title="Partial autocorrelation function (PACF)")
             st.plotly_chart(fig, width="stretch")
     except ImportError:
@@ -237,7 +237,7 @@ with tabs[6]:
     with c2:
         fig = px.line(roll_kurt, title=f"Rolling {window}-period excess kurtosis")
         fig.add_hline(y=0, line_dash="dash", line_color="#94a3b8")
-        fig.add_hline(y=3, line_dash="dot", line_color="#b91c1c",
+        fig.add_hline(y=3, line_dash="dot", line_color="#FB7185",
                         annotation_text="kurt > 3 = fat tails")
         fig.update_layout(showlegend=False, height=320)
         st.plotly_chart(fig, width="stretch")
@@ -286,7 +286,7 @@ with tabs[6]:
         fig = px.line(jb_p,
                         title=f"Rolling Jarque-Bera p-value (normality)",
                         labels={"value": "p-value", "index": "Date"})
-        fig.add_hline(y=0.05, line_dash="dash", line_color="#b91c1c",
+        fig.add_hline(y=0.05, line_dash="dash", line_color="#FB7185",
                         annotation_text="α = 0.05")
         fig.update_layout(showlegend=False, height=320,
                             yaxis=dict(range=[0, 1]))
@@ -296,7 +296,7 @@ with tabs[6]:
             fig = px.line(lb_p,
                             title=f"Rolling Ljung-Box p-value (lag 5, autocorrelation)",
                             labels={"value": "p-value", "index": "Date"})
-            fig.add_hline(y=0.05, line_dash="dash", line_color="#b91c1c",
+            fig.add_hline(y=0.05, line_dash="dash", line_color="#FB7185",
                             annotation_text="α = 0.05")
             fig.update_layout(showlegend=False, height=320,
                                 yaxis=dict(range=[0, 1]))

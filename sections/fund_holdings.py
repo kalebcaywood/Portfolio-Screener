@@ -334,7 +334,7 @@ with tab_holdings:
                    labels={"x": "Number of positions (ranked)", "cumulative_pct": "Cumulative % of book"})
     fig.add_hline(y=0.50, line_dash="dash", line_color="#FF8200",
                     annotation_text="50%")
-    fig.add_hline(y=0.80, line_dash="dot", line_color="#b45309",
+    fig.add_hline(y=0.80, line_dash="dot", line_color="#FBBF24",
                     annotation_text="80%")
     fig.update_yaxes(tickformat=".0%")
     st.plotly_chart(fig, width="stretch")

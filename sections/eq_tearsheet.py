@@ -272,7 +272,7 @@ with tab_price:
         st.markdown(f"##### {ticker} — {period} price history")
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=close.index, y=close.values, name="Close",
-                                    line=dict(color="#1e40af", width=2)))
+                                    line=dict(color="#5BA8E8", width=2)))
         if len(close) >= 50:
             fig.add_trace(go.Scatter(x=close.index, y=close.rolling(50).mean(),
                                         name="50-day MA",
@@ -280,15 +280,15 @@ with tab_price:
         if len(close) >= 200:
             fig.add_trace(go.Scatter(x=close.index, y=close.rolling(200).mean(),
                                         name="200-day MA",
-                                        line=dict(color="#b91c1c", dash="dash", width=1.5)))
+                                        line=dict(color="#FB7185", dash="dash", width=1.5)))
         # 52-week markers
         w52_high = _get("fiftyTwoWeekHigh")
         w52_low = _get("fiftyTwoWeekLow")
         if w52_high:
-            fig.add_hline(y=w52_high, line_dash="dot", line_color="#15803d",
+            fig.add_hline(y=w52_high, line_dash="dot", line_color="#34D399",
                             annotation_text="52W high", annotation_position="right")
         if w52_low:
-            fig.add_hline(y=w52_low, line_dash="dot", line_color="#b45309",
+            fig.add_hline(y=w52_low, line_dash="dot", line_color="#FBBF24",
                             annotation_text="52W low", annotation_position="right")
         fig.update_layout(height=460, hovermode="x unified",
                             yaxis_title=f"Price ({currency})")

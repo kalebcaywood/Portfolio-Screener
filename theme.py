@@ -60,17 +60,19 @@ def require_password() -> None:
 [data-testid="stHeader"] {{ background: transparent !important; }}
 [data-testid="stToolbar"] {{ display: none !important; }}
 
-/* Glassy login card, centered over the backdrop */
+/* Dark glassy login card, centered over the backdrop (matches the terminal
+   theme and keeps the dark password input cohesive). */
 .st-key-gate_card {{
     max-width: 420px;
     margin: 10vh auto 0 auto;
     padding: 34px 34px 26px 34px;
-    background: rgba(255, 255, 255, 0.96);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    border-radius: 12px;
+    background: rgba(13, 18, 30, 0.82);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-top: 4px solid #FF8200;
-    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+    border-radius: 14px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
 }}
 .gate-mark {{
     background: #FF8200;
@@ -85,7 +87,7 @@ def require_password() -> None:
     margin-bottom: 10px;
 }}
 .gate-supra {{
-    color: #FF8200;
+    color: #FF9A33;
     font-weight: 700;
     font-size: 10px;
     letter-spacing: 0.22em;
@@ -94,12 +96,12 @@ def require_password() -> None:
 .gate-title {{
     font-weight: 700;
     font-size: 23px;
-    color: #1a1a1a;
+    color: #F2F5FA;
     letter-spacing: -0.015em;
     margin: 4px 0 4px 0;
 }}
 .gate-caption {{
-    color: #58595B;
+    color: #9AA6BC;
     font-size: 13px;
     margin: 4px 0 16px 0;
 }}
@@ -234,16 +236,24 @@ UT_ROCK       = "#E8E8E8"   # Rock gray
 UT_RIVER      = "#517C96"   # River blue
 UT_GLOBE      = "#0C2340"   # Globe deep navy
 
-# Functional aliases used throughout the app
+# ─── Dark "terminal" palette (active theme) ──────────────────────────────────
+# Deep navy-charcoal canvas, slightly lifted surfaces, Tennessee Orange accent.
+TERM_BG        = "#0B0E17"   # app canvas
+TERM_SURFACE   = "#141B29"   # cards / sidebar / panels
+TERM_SURFACE_2 = "#1C2438"   # raised elements (hover, headers)
+TERM_BORDER    = "#26314A"   # hairline borders
+TERM_BORDER_HI = "#33405E"   # brighter border (hover/focus)
+
+# Functional aliases used throughout the app (now dark-mode values)
 PRIMARY      = UT_ORANGE
-SUCCESS      = "#15803d"
-WARNING      = "#b45309"
-DANGER       = "#b91c1c"
-TEXT         = "#1a1a1a"
-MUTED_TEXT   = UT_SMOKEY
-BG           = UT_WHITE
-SOFT_BG      = "#f7f7f5"
-GRID         = "#e5e5e5"
+SUCCESS      = "#34D399"   # positive (brighter for dark)
+WARNING      = "#FBBF24"
+DANGER       = "#F87171"   # negative
+TEXT         = "#E6EAF2"   # primary text (off-white)
+MUTED_TEXT   = "#8A95AB"   # secondary text
+BG           = TERM_BG
+SOFT_BG      = TERM_SURFACE
+GRID         = "#212B40"   # chart gridlines on dark
 
 # Plotly colorway — orange first, then complementary UT palette + neutrals
 COLORWAY = [
@@ -287,24 +297,24 @@ pio.templates["quantlab"] = go.layout.Template(
         ),
         legend=dict(
             font=dict(size=11, color=TEXT),
-            bgcolor="rgba(255,255,255,0.9)",
+            bgcolor="rgba(20,27,41,0.85)",
             bordercolor=GRID, borderwidth=1,
             orientation="h", y=-0.2, x=0,
         ),
         hoverlabel=dict(
-            font=dict(family="Inter", size=12),
-            bgcolor="white", bordercolor=UT_ORANGE,
+            font=dict(family="Inter", size=12, color=TEXT),
+            bgcolor=TERM_SURFACE_2, bordercolor=UT_ORANGE,
         ),
         margin=dict(t=50, b=50, l=60, r=20),
         colorscale=dict(
-            # Sequential: white → Tennessee Orange
-            sequential=[[0, "#fff4e6"], [0.5, "#ffb04d"], [1, UT_ORANGE]],
-            # Diverging: burgundy (negative) → white → orange (positive)
-            diverging=[[0, UT_LECONTE], [0.5, "#ffffff"], [1, UT_ORANGE]],
+            # Sequential: dark surface → Tennessee Orange
+            sequential=[[0, "#10203a"], [0.5, "#b3600f"], [1, UT_ORANGE]],
+            # Diverging: red (negative) → dark neutral → orange (positive)
+            diverging=[[0, "#F87171"], [0.5, "#141B29"], [1, UT_ORANGE]],
         ),
     )
 )
-pio.templates.default = "plotly_white+quantlab"
+pio.templates.default = "plotly_dark+quantlab"
 
 
 # ─── CSS — narrow scope so Streamlit's icon font keeps working ───────────────
@@ -325,83 +335,100 @@ body {
 .stApp h1 {
     font-weight: 700;
     letter-spacing: -0.025em;
-    color: #1a1a1a;
+    color: #F2F5FA;
     margin-bottom: 0.5rem;
 }
 .stApp h2 {
     font-weight: 600;
     letter-spacing: -0.015em;
-    color: #1a1a1a;
+    color: #E6EAF2;
     margin-top: 1.5rem;
 }
 .stApp h3 {
     font-weight: 600;
     letter-spacing: -0.01em;
-    color: #2a2a2a;
+    color: #D4DBEA;
 }
 .stApp h5 {
-    font-weight: 600;
-    color: #2a2a2a;
+    font-weight: 700;
+    color: #FF8200;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.08em;
     font-size: 11px;
     margin-top: 1rem;
     margin-bottom: 0.5rem;
 }
 
 /* Captions */
-[data-testid="stCaptionContainer"] {
-    color: #58595B;
+[data-testid="stCaptionContainer"], .stApp [data-testid="stCaptionContainer"] p {
+    color: #8A95AB;
 }
 
-/* Metric cards — white background with a thin orange top border for brand */
+/* Metric cards — dark panel with a subtle left accent (restrained: a single
+   hairline + left bar reads cleaner than an orange top border on every card) */
 [data-testid="stMetric"] {
-    background: #ffffff;
-    padding: 14px 16px;
-    border-radius: 6px;
-    border: 1px solid #e5e5e5;
-    border-top: 3px solid #FF8200;
-    transition: box-shadow 0.2s, border-color 0.2s;
+    background: #141B29;
+    padding: 14px 16px 14px 18px;
+    border-radius: 8px;
+    border: 1px solid #26314A;
+    border-left: 3px solid #2E3A55;
+    transition: border-color 0.18s, box-shadow 0.18s, transform 0.18s;
 }
 [data-testid="stMetric"]:hover {
-    box-shadow: 0 1px 3px rgba(255, 130, 0, 0.15);
-    border-color: #FF8200;
+    border-left-color: #FF8200;
+    border-color: #33405E;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+    transform: translateY(-1px);
 }
 [data-testid="stMetricLabel"] {
     font-size: 11px;
-    color: #58595B;
+    color: #8A95AB;
     font-weight: 600;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
 }
 [data-testid="stMetricValue"] {
-    font-size: 22px;
+    font-size: 23px;
     font-weight: 700;
-    color: #1a1a1a;
+    color: #F2F5FA;
     line-height: 1.2;
+    font-feature-settings: 'tnum' 1;
 }
 [data-testid="stMetricDelta"] {
     font-size: 12px;
-    font-weight: 500;
+    font-weight: 600;
 }
 
-/* Sidebar — light gray with orange left border */
+/* Sidebar — dark panel with orange left border */
 [data-testid="stSidebar"] {
-    background-color: #f7f7f5;
+    background-color: #0E1422;
     border-right: 3px solid #FF8200;
 }
 
-/* DataFrame */
-.stDataFrame {
-    border: 1px solid #e5e5e5;
-    border-radius: 6px;
+/* DataFrame / data editor — terminal-style framed grid */
+.stDataFrame, [data-testid="stDataFrame"], [data-testid="stDataFrameResizable"] {
+    border: 1px solid #26314A;
+    border-radius: 8px;
     overflow: hidden;
+}
+/* Table column headers — uppercase muted, like a terminal */
+.stDataFrame [data-testid="stDataFrameResizable"] [role="columnheader"],
+[data-testid="stDataFrame"] [role="columnheader"] {
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: #8A95AB;
+}
+/* Static tables (st.table) */
+.stTable, [data-testid="stTable"] table {
+    border-color: #26314A;
 }
 
 /* Section divider */
 hr {
     margin: 1.5rem 0;
-    border-color: #e5e5e5;
+    border-color: #26314A;
     border-top-width: 1px;
 }
 
@@ -464,7 +491,7 @@ header [role="tablist"] > div {
 /* Style the active item in Tennessee Orange */
 [data-testid="stTopNav"] a, header nav a, header [role="tab"] {
     font-weight: 500;
-    color: #1a1a1a;
+    color: #C8D0E0;
 }
 [data-testid="stTopNav"] a[aria-current="page"],
 header nav a[aria-current="page"],
@@ -495,13 +522,16 @@ header [role="tab"][aria-selected="true"] {
 /* Tabs — orange active state (for in-page st.tabs, not top nav) */
 .stTabs [data-baseweb="tab-list"] {
     gap: 4px;
-    border-bottom: 2px solid #e5e5e5;
+    border-bottom: 2px solid #26314A;
 }
 .stTabs [data-baseweb="tab"] {
     font-size: 13px;
     font-weight: 500;
-    color: #58595B;
+    color: #8A95AB;
     padding: 8px 14px;
+}
+.stTabs [data-baseweb="tab"]:hover {
+    color: #C8D0E0;
 }
 .stTabs [aria-selected="true"] {
     color: #FF8200;
@@ -539,22 +569,23 @@ header [role="tab"][aria-selected="true"] {
 }
 .stTextInput input, .stNumberInput input, .stTextArea textarea {
     border-radius: 4px;
-    border-color: #cbd5e1;
+    border-color: #2E3A55;
 }
 
 /* Links */
 a, .stApp a {
-    color: #FF8200;
+    color: #FF9A33;
     text-decoration: none;
 }
 a:hover {
     text-decoration: underline;
 }
 
-/* Alerts */
+/* Alerts — dark tint with orange accent */
 .stAlert {
-    border-radius: 6px;
+    border-radius: 8px;
     border-left: 4px solid #FF8200;
+    background: #141B29;
 }
 
 /* Slider — orange track */
@@ -613,7 +644,7 @@ a:hover {
     text-transform: uppercase;
 }
 .ut-title {
-    color: #1a1a1a;
+    color: #F2F5FA;
     font-weight: 700;
     font-size: 34px;
     letter-spacing: -0.02em;
@@ -640,37 +671,38 @@ a:hover {
     line-height: 1;
 }
 .ut-sidebar-text {
-    color: #58595B;
+    color: #8A95AB;
     font-weight: 600;
     font-size: 10px;
     letter-spacing: 0.18em;
     text-transform: uppercase;
 }
 
-/* Status bar */
+/* Status bar — dark terminal strip */
 .qstatus {
-    background: #f7f7f5;
-    border: 1px solid #e5e5e5;
+    background: #141B29;
+    border: 1px solid #26314A;
     border-left: 4px solid #FF8200;
-    border-radius: 4px;
+    border-radius: 6px;
     padding: 8px 14px;
     margin-bottom: 1rem;
     font-size: 12px;
-    color: #58595B;
+    color: #C8D0E0;
     display: flex;
     flex-wrap: wrap;
     gap: 1.5rem;
 }
 .qstatus .qstatus-key {
-    color: #888888;
+    color: #6B7589;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     font-size: 10px;
     margin-right: 6px;
 }
 .qstatus .qstatus-val {
-    color: #1a1a1a;
+    color: #F2F5FA;
     font-weight: 600;
+    font-feature-settings: 'tnum' 1;
 }
 
 /* Badges */
@@ -684,11 +716,33 @@ a:hover {
     text-transform: uppercase;
     line-height: 1;
 }
-.qbadge-reup, .qbadge-low, .qbadge-success { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
-.qbadge-add, .qbadge-info                  { background: #fff4e6; color: #c25e00; border: 1px solid #ffd7a8; }
-.qbadge-hold, .qbadge-neutral              { background: #f1f5f9; color: #58595B; border: 1px solid #e5e5e5; }
-.qbadge-trim, .qbadge-medium, .qbadge-warning { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
-.qbadge-exit, .qbadge-high, .qbadge-danger { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+.qbadge-reup, .qbadge-low, .qbadge-success { background: rgba(52,211,153,0.14); color: #4ADE80; border: 1px solid rgba(52,211,153,0.35); }
+.qbadge-add, .qbadge-info                  { background: rgba(255,130,0,0.15); color: #FFA64D; border: 1px solid rgba(255,130,0,0.40); }
+.qbadge-hold, .qbadge-neutral              { background: rgba(138,149,171,0.14); color: #AEB8CC; border: 1px solid rgba(138,149,171,0.30); }
+.qbadge-trim, .qbadge-medium, .qbadge-warning { background: rgba(251,191,36,0.14); color: #FBBF24; border: 1px solid rgba(251,191,36,0.35); }
+.qbadge-exit, .qbadge-high, .qbadge-danger { background: rgba(248,113,113,0.15); color: #FB7185; border: 1px solid rgba(248,113,113,0.38); }
+
+/* Expanders — dark panel */
+[data-testid="stExpander"] {
+    border: 1px solid #26314A;
+    border-radius: 8px;
+    background: #111826;
+}
+[data-testid="stExpander"] summary:hover, [data-testid="stExpander"] summary:hover p {
+    color: #FF8200;
+}
+
+/* Dividers Streamlit renders as its own element */
+[data-testid="stDivider"] hr { border-color: #26314A; }
+
+/* Code / inline mono */
+.stApp code {
+    background: #1C2438;
+    color: #FFB066;
+    border: 1px solid #26314A;
+    border-radius: 4px;
+    padding: 1px 5px;
+}
 </style>
 """
 
@@ -784,19 +838,20 @@ def status_line(positions: int, aum: float, last_date, benchmark: str = "SPX",
 
 # ─── DataFrame styling helpers ────────────────────────────────────────────────
 
+# Dark-tinted cell backgrounds with bright text, to blend with the dark grid.
 REC_PALETTE: dict[str, tuple[str, str]] = {
-    "REUP": ("#dcfce7", "#15803d"),
-    "ADD":  ("#fff4e6", "#c25e00"),
-    "HOLD": ("#f1f5f9", "#58595B"),
-    "TRIM": ("#fef3c7", "#b45309"),
-    "EXIT": ("#fee2e2", "#b91c1c"),
+    "REUP": ("#11321F", "#4ADE80"),
+    "ADD":  ("#33240F", "#FFA64D"),
+    "HOLD": ("#1E2638", "#AEB8CC"),
+    "TRIM": ("#332A0D", "#FBBF24"),
+    "EXIT": ("#331A1A", "#FB7185"),
 }
 
 SEVERITY_PALETTE: dict[str, tuple[str, str]] = {
-    "high":   ("#fee2e2", "#b91c1c"),
-    "medium": ("#fef3c7", "#b45309"),
-    "info":   ("#fff4e6", "#c25e00"),
-    "low":    ("#dcfce7", "#15803d"),
+    "high":   ("#331A1A", "#FB7185"),
+    "medium": ("#332A0D", "#FBBF24"),
+    "info":   ("#33240F", "#FFA64D"),
+    "low":    ("#11321F", "#4ADE80"),
 }
 
 

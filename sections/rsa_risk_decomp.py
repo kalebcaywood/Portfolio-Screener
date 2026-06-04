@@ -1028,12 +1028,12 @@ with tabs[5]:
                 with cols[1]:
                     st.markdown(f"**{s['issue']}**")
                     st.markdown(
-                        f"<span style='color:#64748b;font-size:13px;'>Current state:</span> "
-                        f"<span style='color:#0f172a;font-size:13px;'>{s['current']}</span>",
+                        f"<span style='color:#8A95AB;font-size:13px;'>Current state:</span> "
+                        f"<span style='color:#E6EAF2;font-size:13px;'>{s['current']}</span>",
                         unsafe_allow_html=True,
                     )
                     st.markdown(
-                        f"<span style='color:#1e40af;font-weight:600;'>Action: </span>"
-                        f"<span style='color:#0f172a;'>{s['action']}</span>",
+                        f"<span style='color:#FF9A33;font-weight:600;'>Action: </span>"
+                        f"<span style='color:#E6EAF2;'>{s['action']}</span>",
                         unsafe_allow_html=True,
                     )

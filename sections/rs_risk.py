@@ -94,7 +94,7 @@ st.dataframe(dollar_df, hide_index=True, width="stretch")
 fig = go.Figure()
 fig.add_histogram(x=r, nbinsx=40, name="Period returns",
                     marker_color="#cbd5e1", opacity=0.85)
-colors = ["#FF8200", "#b45309", "#b91c1c"]
+colors = ["#FF8200", "#FBBF24", "#FB7185"]
 for i, a in enumerate(alphas):
     v = R.var_historical(r, a)
     fig.add_vline(x=v, line_dash="dash", line_color=colors[i % len(colors)],

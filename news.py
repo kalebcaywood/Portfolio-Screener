@@ -134,9 +134,10 @@ def render_news_ticker(label: str = "WSJ") -> None:
     align-items: stretch;
     height: {TICKER_H}px;
     margin: 0;
-    background: #ffffff;
+    background: #0E1422;
     border: none;
-    border-bottom: 2px solid #FF8200;
+    border-bottom: 1px solid #26314A;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
     overflow: hidden;
 }}
 /* Push the nav header, sidebar, and main content below the fixed ticker. */
@@ -183,7 +184,7 @@ header[data-testid="stHeader"] {{ top: {TICKER_H}px !important; }}
     animation: news-tkr-scroll {duration}s linear infinite;
 }}
 .news-tkr-track a {{
-    color: #1a1a1a;
+    color: #C8D0E0;
     font-size: 13px;
     font-weight: 500;
     text-decoration: none;
