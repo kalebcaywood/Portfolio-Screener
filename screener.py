@@ -298,6 +298,59 @@ def fetch_financials(symbol: str) -> dict:
         return {"income": pd.DataFrame(), "balance": pd.DataFrame(), "cashflow": pd.DataFrame()}
 
 
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_prices_bulk(symbols: tuple, period: str = "2y") -> dict:
+    """Download adjusted closes for many tickers in ONE request.
+
+    Returns {symbol: close_series}. Dramatically faster than per-ticker
+    ``history()`` for a universe (one HTTP round-trip vs N). Tickers that
+    fail simply don't appear in the dict — callers fall back to per-ticker
+    fetching for those.
+    """
+    syms = list(dict.fromkeys(s for s in symbols if s))  # dedupe, keep order
+    if not syms:
+        return {}
+    kw = dict(period=period, auto_adjust=True, progress=False,
+              group_by="column", threads=True)
+    raw = None
+    for attempt in range(2):
+        try:
+            if _YF_SESSION is not None:
+                try:
+                    raw = yf.download(syms, session=_YF_SESSION, **kw)
+                except TypeError:
+                    raw = yf.download(syms, **kw)  # older/newer signature
+            else:
+                raw = yf.download(syms, **kw)
+            if raw is not None and not raw.empty:
+                break
+        except Exception:
+            raw = None
+        if attempt == 0:
+            time.sleep(0.4)
+    if raw is None or raw.empty:
+        return {}
+
+    out: dict = {}
+    if isinstance(raw.columns, pd.MultiIndex):
+        lvl0 = raw.columns.get_level_values(0)
+        close = raw["Close"] if "Close" in lvl0 else None
+        if close is None:
+            return {}
+        for s in syms:
+            if s in close.columns:
+                ser = close[s].dropna()
+                if len(ser) > 1:
+                    out[s] = ser
+    else:
+        # single-ticker download → flat columns
+        if "Close" in raw.columns:
+            ser = raw["Close"].dropna()
+            if len(ser) > 1:
+                out[syms[0]] = ser
+    return out
+
+
 def returns_from_prices(prices: pd.Series) -> pd.Series:
     return prices.pct_change().dropna()
 
@@ -491,9 +544,20 @@ def dividend_yield_decimal(info: dict) -> float:
     return np.nan
 
 
-def compute_metrics(symbol: str, bench_returns: pd.Series | None = None) -> dict:
+def compute_metrics(symbol: str, bench_returns: pd.Series | None = None,
+                    close: pd.Series | None = None,
+                    include_financials: bool = True) -> dict:
+    """Compute one ticker's metric row.
+
+    ``close``: a pre-fetched adjusted-close series (e.g. from
+    ``fetch_prices_bulk``). When provided, the per-ticker history call is
+    skipped. ``include_financials``: when False, the Piotroski F-Score (which
+    needs 3 extra statement calls — the slowest part) is skipped (NaN).
+    """
     info = fetch_info(symbol)
-    hist = fetch_history(symbol, "2y")
+    if close is None or len(close) <= 5:
+        hist = fetch_history(symbol, "2y")
+        close = hist["Close"] if (not hist.empty and "Close" in hist.columns) else None
 
     m: dict = {"ticker": symbol}
     m["name"] = info.get("shortName") or info.get("longName") or symbol
@@ -531,8 +595,7 @@ def compute_metrics(symbol: str, bench_returns: pd.Series | None = None) -> dict
     m["div_yield"] = dividend_yield_decimal(info)
     m["payout_ratio"] = info.get("payoutRatio", np.nan)
 
-    if not hist.empty and "Close" in hist.columns and len(hist) > 5:
-        close = hist["Close"]
+    if close is not None and len(close) > 5:
         rets = returns_from_prices(close)
 
         m["ret_1m"] = total_return(close, 21)
@@ -566,27 +629,42 @@ def compute_metrics(symbol: str, bench_returns: pd.Series | None = None) -> dict
                   "sortino", "max_dd", "rsi_14", "momentum_12_1", "pct_from_52w_high", "beta_1y"]:
             m[k] = np.nan
 
-    m["piotroski_f"] = piotroski_fscore(fetch_financials(symbol))
+    m["piotroski_f"] = (piotroski_fscore(fetch_financials(symbol))
+                        if include_financials else np.nan)
 
     return m
 
 
 def compute_portfolio(symbols: list[str], progress_callback=None,
-                       max_workers: int = 8) -> pd.DataFrame:
-    """Compute metrics for a list of tickers in parallel.
+                       max_workers: int = 10,
+                       include_financials: bool = False) -> pd.DataFrame:
+    """Compute metrics for a list of tickers, optimized for larger universes.
 
-    Each ticker's three yfinance calls (info, history, financials) run inside
-    a worker thread; threads share Streamlit's cache so duplicate work is
-    eliminated. Order of the input list is preserved in the output DataFrame.
+    Speed model:
+      • Prices for ALL tickers (+ benchmark) are pulled in ONE bulk
+        ``yf.download`` instead of N per-ticker history calls.
+      • Each ticker's ``.info`` runs in a worker thread.
+      • Piotroski (3 extra statement calls — the slowest part) is OFF by
+        default; pass ``include_financials=True`` to compute it.
+    Order of the input list is preserved in the output DataFrame.
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    bench_hist = fetch_history(BENCHMARK, "2y")
-    bench_returns = returns_from_prices(bench_hist["Close"]) if not bench_hist.empty else None
+    # One bulk request for every ticker's prices plus the benchmark.
+    price_map = fetch_prices_bulk(tuple(symbols) + (BENCHMARK,), "2y")
+    bench_close = price_map.get(BENCHMARK)
+    if bench_close is None:
+        bh = fetch_history(BENCHMARK, "2y")
+        bench_close = bh["Close"] if (not bh.empty and "Close" in bh.columns) else None
+    bench_returns = returns_from_prices(bench_close) if bench_close is not None else None
 
     results: dict[str, dict] = {}
     with ThreadPoolExecutor(max_workers=max_workers) as exe:
-        futures = {exe.submit(compute_metrics, s, bench_returns): s for s in symbols}
+        futures = {
+            exe.submit(compute_metrics, s, bench_returns,
+                       price_map.get(s), include_financials): s
+            for s in symbols
+        }
         done = 0
         for future in as_completed(futures):
             sym = futures[future]
@@ -598,3 +676,87 @@ def compute_portfolio(symbols: list[str], progress_callback=None,
             if progress_callback:
                 progress_callback(done - 1, len(symbols), sym)
     return pd.DataFrame([results[s] for s in symbols])
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_fast_info(symbol: str) -> dict:
+    """Lightweight quote (market cap, price, currency, 52w) via fast_info.
+
+    Much cheaper than the full ``.info`` quoteSummary call — used for the
+    fast universe-browse path where we don't need valuation/quality fields.
+    """
+    try:
+        return _fast_info_to_dict(_ticker(symbol))
+    except Exception:
+        return {}
+
+
+def compute_universe_lite(symbols: list[str], meta: dict | None = None,
+                          progress_callback=None, max_workers: int = 12) -> pd.DataFrame:
+    """Fast, price-only snapshot of a universe for *browsing* (not deep screening).
+
+    One bulk price download drives all the return/vol/momentum/beta metrics;
+    market cap comes from ``fast_info`` (parallel); name + sector come from the
+    curated ``meta`` map ({symbol: {"name", "sector"}}). No ``.info`` and no
+    financials, so a few-hundred-name universe loads in seconds. Use
+    ``compute_portfolio`` afterwards for the full valuation/quality/composite
+    pass on whatever the user narrows down to.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    meta = meta or {}
+
+    price_map = fetch_prices_bulk(tuple(symbols) + (BENCHMARK,), "2y")
+    bench_close = price_map.get(BENCHMARK)
+    bench_returns = returns_from_prices(bench_close) if bench_close is not None else None
+
+    fast: dict[str, dict] = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as exe:
+        futures = {exe.submit(fetch_fast_info, s): s for s in symbols}
+        done = 0
+        for future in as_completed(futures):
+            s = futures[future]
+            try:
+                fast[s] = future.result()
+            except Exception:
+                fast[s] = {}
+            done += 1
+            if progress_callback:
+                progress_callback(done - 1, len(symbols), s)
+
+    rows = []
+    for s in symbols:
+        fi = fast.get(s, {})
+        close = price_map.get(s)
+        info_meta = meta.get(s, {})
+        m: dict = {
+            "ticker": s,
+            "name": info_meta.get("name") or s,
+            "sector": info_meta.get("sector", "Unknown"),
+            "market_cap": fi.get("marketCap", np.nan),
+            "price": fi.get("currentPrice", np.nan),
+            "currency": (fi.get("currency") or "USD"),
+        }
+        if close is not None and len(close) > 5:
+            rets = returns_from_prices(close)
+            m["ret_1m"] = total_return(close, 21)
+            m["ret_3m"] = total_return(close, 63)
+            m["ret_6m"] = total_return(close, 126)
+            m["ret_1y"] = total_return(close, 252)
+            ytd = close[close.index.year == close.index[-1].year]
+            m["ret_ytd"] = float(close.iloc[-1] / ytd.iloc[0] - 1) if len(ytd) else np.nan
+            m["volatility"] = annualized_volatility(rets)
+            m["max_dd"] = max_drawdown(close.iloc[-252:] if len(close) >= 252 else close)
+            m["rsi_14"] = rsi(close)
+            hi = close.iloc[-252:].max() if len(close) >= 252 else close.max()
+            m["pct_from_52w_high"] = float(close.iloc[-1] / hi - 1)
+            m["momentum_12_1"] = (float(close.iloc[-21] / close.iloc[-252] - 1)
+                                  if len(close) >= 252 else np.nan)
+            m["beta_1y"] = (beta_vs_benchmark(rets.iloc[-252:] if len(rets) >= 252 else rets,
+                                              bench_returns)
+                            if bench_returns is not None else np.nan)
+        else:
+            for k in ["ret_1m", "ret_3m", "ret_6m", "ret_1y", "ret_ytd", "volatility",
+                      "max_dd", "rsi_14", "pct_from_52w_high", "momentum_12_1", "beta_1y"]:
+                m[k] = np.nan
+        rows.append(m)
+    return pd.DataFrame(rows)

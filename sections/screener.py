@@ -7,10 +7,11 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+import universes as U
 from data import format_market_cap
-from theme import inject_css, page_header
+from theme import badge, inject_css, page_header
 from screener import compute_portfolio, fetch_history, returns_from_prices
-from scoring import composite_score
+from scoring import REC_ORDER, composite_score, recommend
 
 inject_css()
 PCT_COLS = {"roe", "roa", "gross_margin", "op_margin", "net_margin", "rev_growth",
@@ -48,32 +49,41 @@ page_header(
     "equities. Data via yfinance.",
 )
 
-# Use tickers from session state if available, else show a diverse default
-default_tickers = st.session_state.get("tickers")
-if default_tickers:
-    st.info(f"Loaded {len(default_tickers)} tickers from your active portfolio. "
-            "You can override or trim this list in the sidebar.")
-    default_str = ", ".join(default_tickers)
-else:
+# ─── Universe selection ──────────────────────────────────────────────────────
+st.sidebar.header("Universe")
+src = st.sidebar.radio(
+    "Source", ["Preset", "Custom list", "My portfolio"], index=0,
+    help="Browse a curated preset, paste your own tickers, or pull from a "
+         "portfolio you've loaded on the Home page.",
+)
+
+if src == "Preset":
+    preset = st.sidebar.selectbox("Preset universe", U.all_preset_names())
+    tickers = U.resolve(preset)
+    st.sidebar.caption(f"{len(tickers)} names · {preset}")
+elif src == "My portfolio":
+    tickers = sorted({str(t).strip().upper()
+                      for t in (st.session_state.get("tickers") or [])
+                      if str(t).strip()})
+    if tickers:
+        st.sidebar.caption(f"{len(tickers)} names from your loaded portfolio")
+    else:
+        st.sidebar.caption("No portfolio loaded — build one on the Home page first.")
+else:  # Custom list
     default_str = (
         "AAPL, MSFT, GOOGL, NVDA, META, JPM, JNJ, XOM, PG, BRK-B, "
         "2330.TW, ASML.AS, NESN.SW, 7203.T, 005930.KS"
     )
+    txt = st.sidebar.text_area(
+        "Tickers", default_str, height=120,
+        help="Comma- or space-separated Yahoo symbols. Foreign listings use "
+             "exchange suffixes: London BARC.L · Tokyo 7203.T · HK 0700.HK · "
+             "Taiwan 2330.TW · Switzerland NESN.SW · Korea 005930.KS",
+    )
+    tickers = sorted({t.strip().upper() for t in txt.replace(",", " ").split() if t.strip()})
 
-st.sidebar.header("Tickers")
-txt = st.sidebar.text_area(
-    "Tickers", default_str, height=130,
-    help=(
-        "Comma- or space-separated. Yahoo Finance symbols. "
-        "Foreign listings use exchange suffixes:\n"
-        "• London: BARC.L\n• Tokyo: 7203.T\n• Hong Kong: 0700.HK\n"
-        "• Taiwan: 2330.TW\n• Switzerland: NESN.SW\n• Korea: 005930.KS"
-    ),
-)
-tickers = sorted({t.strip().upper() for t in txt.replace(",", " ").split() if t.strip()})
-
-if tickers:
-    st.sidebar.caption(f"{len(tickers)} unique tickers in the queue")
+if tickers and src != "Preset":
+    st.sidebar.caption(f"{len(tickers)} unique tickers queued")
 
 st.sidebar.markdown("---")
 st.sidebar.header("Screen filters")
@@ -84,6 +94,14 @@ min_piotroski = st.sidebar.slider("Min Piotroski F-Score", 0, 9, 0)
 min_div = st.sidebar.number_input("Min dividend yield", 0.0, 0.20, 0.0, step=0.005, format="%.3f")
 max_de = st.sidebar.number_input("Max debt/equity (0 = no limit)", 0.0, 50.0, 0.0, step=0.5)
 
+st.sidebar.markdown("---")
+want_piotroski = st.sidebar.checkbox(
+    "Compute Piotroski F-Score", value=False,
+    help="Adds 3 financial-statement calls per name (slower). Auto-enabled if "
+         "you set a Min Piotroski filter.",
+)
+include_fin = want_piotroski or (min_piotroski > 0)
+
 if st.sidebar.button("Run screener", type="primary", width="stretch") and tickers:
     progress = st.progress(0.0)
     status = st.empty()
@@ -92,9 +110,11 @@ if st.sidebar.button("Run screener", type="primary", width="stretch") and ticker
         progress.progress((i + 1) / n)
         status.text(f"Fetched {i + 1}/{n} — {sym}")
 
-    with st.spinner(f"Fetching data for {len(tickers)} tickers in parallel..."):
-        df = compute_portfolio(tickers, progress_callback=cb)
+    label = "with Piotroski" if include_fin else "fast"
+    with st.spinner(f"Fetching {len(tickers)} names ({label})…"):
+        df = compute_portfolio(tickers, progress_callback=cb, include_financials=include_fin)
         df = composite_score(df)
+        df = recommend(df)
     progress.empty()
     status.empty()
     st.session_state["screener_data"] = df
@@ -160,10 +180,13 @@ if currency_pick and "currency" in fdf.columns:
 
 st.caption(f"**{len(fdf)}** of {len(df)} tickers passed filters")
 
-tabs = st.tabs(["Summary", "Valuation", "Quality", "Risk & Momentum",
-                "Composite ranking", "Charts", "Raw data"])
+(tab_summary, tab_rec, tab_analysis, tab_val, tab_qual,
+ tab_risk, tab_rank, tab_raw) = st.tabs([
+    "Summary", "Recommendations", "Analysis", "Valuation", "Quality",
+    "Risk & Momentum", "Composite ranking", "Raw data",
+])
 
-with tabs[0]:
+with tab_summary:
     cols = ["ticker", "name", "country", "currency", "exchange", "sector",
             "market_cap", "price", "pe_trailing", "pb", "roe", "div_yield",
             "ret_1y", "piotroski_f", "score_composite"]
@@ -184,7 +207,48 @@ with tabs[0]:
                 co_counts.columns = ["country", "n_tickers"]
                 st.dataframe(co_counts, hide_index=True, width="stretch")
 
-with tabs[1]:
+with tab_rec:
+    if "recommendation" not in fdf.columns or not len(fdf):
+        st.info("Run a screen to generate recommendations.")
+    else:
+        # Tier counts across the filtered set
+        counts = (fdf["recommendation"].value_counts()
+                  .reindex(REC_ORDER).fillna(0).astype(int))
+        cc = st.columns(len(REC_ORDER))
+        for i, tier in enumerate(REC_ORDER):
+            cc[i].metric(tier.title(), int(counts[tier]))
+        st.caption(
+            "Transparent, rules-based tiers: the composite z-score sets the base "
+            "rank, then explicit quality / value / momentum / risk flags promote "
+            "or demote each name. The **why** is in the Reasons column "
+            "(✓ strengths, ✗ cautions)."
+        )
+
+        TIER_COLORS = {
+            "STRONG BUY": ("#11321F", "#4ADE80"), "BUY": ("#14352A", "#5EE08A"),
+            "WATCH": ("#332A0D", "#FBBF24"), "HOLD": ("#1E2638", "#AEB8CC"),
+            "AVOID": ("#331A1A", "#FB7185"),
+        }
+        order_map = {t: i for i, t in enumerate(REC_ORDER)}
+        rdf = fdf.copy()
+        rdf["_tr"] = rdf["recommendation"].map(order_map).fillna(99)
+        sort_key = "rec_score" if "rec_score" in rdf.columns else "score_composite"
+        rdf = rdf.sort_values(["_tr", sort_key], ascending=[True, False])
+
+        rec_cols = ["ticker", "name", "sector", "recommendation", "rec_reasons",
+                    "score_composite", "pe_trailing", "roe", "ret_1y",
+                    "div_yield", "market_cap"]
+        rec_cols = [c for c in rec_cols if c in rdf.columns]
+        disp = fmt(rdf[rec_cols])
+
+        def _style_rec(v):
+            bg, fg = TIER_COLORS.get(v, ("", ""))
+            return f"background-color:{bg};color:{fg};font-weight:700;" if bg else ""
+
+        styled = disp.style.map(_style_rec, subset=["recommendation"])
+        st.dataframe(styled, width="stretch", hide_index=True)
+
+with tab_val:
     cols = ["ticker", "name", "pe_trailing", "pe_forward", "peg", "pb", "ps",
             "ev_ebitda", "ev_rev", "rev_growth", "earnings_growth", "score_value"]
     cols = [c for c in cols if c in fdf.columns]
@@ -204,7 +268,7 @@ with tabs[1]:
             fig.update_traces(textposition="top center")
             st.plotly_chart(fig, width="stretch")
 
-with tabs[2]:
+with tab_qual:
     cols = ["ticker", "name", "roe", "roa", "gross_margin", "op_margin", "net_margin",
             "current_ratio", "quick_ratio", "debt_equity", "piotroski_f",
             "div_yield", "payout_ratio", "score_quality"]
@@ -212,7 +276,7 @@ with tabs[2]:
     st.dataframe(fmt(fdf[cols].sort_values("score_quality", ascending=False)),
                  width="stretch", hide_index=True)
 
-with tabs[3]:
+with tab_risk:
     cols = ["ticker", "ret_1m", "ret_3m", "ret_6m", "ret_1y", "ret_ytd",
             "momentum_12_1", "pct_from_52w_high", "rsi_14", "volatility",
             "max_dd", "sharpe", "sortino", "beta_1y", "score_momentum", "score_low_risk"]
@@ -229,7 +293,7 @@ with tabs[3]:
             fig.update_yaxes(tickformat=".0%")
             st.plotly_chart(fig, width="stretch")
 
-with tabs[4]:
+with tab_rank:
     score_cols = ["ticker", "name", "sector", "score_value", "score_quality",
                   "score_momentum", "score_low_risk", "score_composite", "rank"]
     score_cols = [c for c in score_cols if c in fdf.columns]
@@ -245,46 +309,69 @@ with tabs[4]:
                       title="Factor exposure by ticker (z-score)")
         st.plotly_chart(fig, width="stretch")
 
-with tabs[5]:
+with tab_analysis:
     if not len(fdf):
-        st.info("No tickers passed the current filters — adjust the sidebar to see chart detail.")
+        st.info("No tickers passed the current filters — adjust the sidebar to analyze a name.")
     else:
-        sel = st.selectbox("Detail ticker", fdf["ticker"].tolist())
+        sel = st.selectbox("Analyze ticker", fdf["ticker"].tolist())
         row = fdf[fdf["ticker"] == sel].iloc[0] if len(fdf[fdf["ticker"] == sel]) else None
 
-        # Headline ticker info
         if row is not None:
             name = row.get("name", sel)
             sector = row.get("sector", "—")
             country = row.get("country", "—")
             currency = row.get("currency", "USD")
             st.markdown(f"#### {name}")
-            st.caption(
-                f"{sel}  ·  {sector}  ·  {country}  ·  listed in {currency}"
-            )
+            st.caption(f"{sel}  ·  {sector}  ·  {country}  ·  listed in {currency}")
 
-            # Headline metrics row
-            kpi = st.columns(6)
-            def _show(col, label, val, fmt_str="{:.2f}", pct=False):
+            # ── Recommendation banner ──────────────────────────────────────
+            rec = row.get("recommendation", "HOLD")
+            reasons = row.get("rec_reasons", "")
+            rank = row.get("rank")
+            badge_kind = {"STRONG BUY": "success", "BUY": "success", "WATCH": "warning",
+                          "HOLD": "neutral", "AVOID": "danger"}.get(rec, "neutral")
+            rank_txt = f"  ·  composite rank #{int(rank)} of {len(df)}" if pd.notna(rank) else ""
+            st.markdown(
+                f"{badge(rec, kind=badge_kind)} "
+                f"<span style='color:#8A95AB;font-size:13px;margin-left:8px;'>{reasons}{rank_txt}</span>",
+                unsafe_allow_html=True,
+            )
+            st.markdown("")
+
+            def _show(col, label, val, fmt_str="{:.2f}", pct=False, suffix=""):
                 if pd.notna(val):
-                    s = (f"{val:.2%}" if pct else fmt_str.format(val))
+                    s = (f"{val:.2%}" if pct else fmt_str.format(val)) + suffix
                     col.metric(label, s)
                 else:
                     col.metric(label, "—")
-            _show(kpi[0], "Price", row.get("price"))
-            _show(kpi[1], "P/E", row.get("pe_trailing"))
-            _show(kpi[2], "P/B", row.get("pb"))
-            _show(kpi[3], "ROE", row.get("roe"), pct=True)
-            _show(kpi[4], "Div yield", row.get("div_yield"), pct=True)
-            _show(kpi[5], "1Y return", row.get("ret_1y"), pct=True)
 
-            kpi2 = st.columns(6)
-            _show(kpi2[0], "Beta (1Y)", row.get("beta_1y"))
-            _show(kpi2[1], "Volatility", row.get("volatility"), pct=True)
-            _show(kpi2[2], "Sharpe", row.get("sharpe"))
-            _show(kpi2[3], "Max DD", row.get("max_dd"), pct=True)
-            _show(kpi2[4], "RSI(14)", row.get("rsi_14"))
-            _show(kpi2[5], "Piotroski", row.get("piotroski_f"), fmt_str="{:.0f}")
+            # ── Fundamental analysis, grouped ──────────────────────────────
+            st.markdown("##### Valuation")
+            c = st.columns(6)
+            _show(c[0], "Price", row.get("price"))
+            _show(c[1], "P/E (trail)", row.get("pe_trailing"))
+            _show(c[2], "P/E (fwd)", row.get("pe_forward"))
+            _show(c[3], "PEG", row.get("peg"))
+            _show(c[4], "P/B", row.get("pb"))
+            _show(c[5], "EV/EBITDA", row.get("ev_ebitda"))
+
+            st.markdown("##### Profitability & growth")
+            c = st.columns(6)
+            _show(c[0], "ROE", row.get("roe"), pct=True)
+            _show(c[1], "ROA", row.get("roa"), pct=True)
+            _show(c[2], "Net margin", row.get("net_margin"), pct=True)
+            _show(c[3], "Gross margin", row.get("gross_margin"), pct=True)
+            _show(c[4], "Rev growth", row.get("rev_growth"), pct=True)
+            _show(c[5], "EPS growth", row.get("earnings_growth"), pct=True)
+
+            st.markdown("##### Health, dividend & risk")
+            c = st.columns(6)
+            _show(c[0], "Debt/Equity", row.get("debt_equity"))
+            _show(c[1], "Current ratio", row.get("current_ratio"))
+            _show(c[2], "Piotroski", row.get("piotroski_f"), fmt_str="{:.0f}")
+            _show(c[3], "Div yield", row.get("div_yield"), pct=True)
+            _show(c[4], "Beta (1Y)", row.get("beta_1y"))
+            _show(c[5], "Max DD", row.get("max_dd"), pct=True)
 
         st.markdown("---")
         h = fetch_history(sel, "2y")
@@ -293,25 +380,30 @@ with tabs[5]:
         else:
             c1, c2 = st.columns([2, 1])
             with c1:
+                close = h["Close"]
                 fig = go.Figure()
-                fig.add_trace(go.Scatter(x=h.index, y=h["Close"], name="Close"))
-                fig.add_trace(go.Scatter(x=h.index, y=h["Close"].rolling(50).mean(),
-                                            name="50-day MA", line=dict(dash="dash")))
-                fig.add_trace(go.Scatter(x=h.index, y=h["Close"].rolling(200).mean(),
-                                            name="200-day MA", line=dict(dash="dash")))
-                fig.update_layout(title=f"{sel} — 2-year price with moving averages", height=420)
+                fig.add_trace(go.Scatter(x=close.index, y=close, name="Close",
+                                         line=dict(color="#5BA8E8", width=2)))
+                if len(close) >= 50:
+                    fig.add_trace(go.Scatter(x=close.index, y=close.rolling(50).mean(),
+                                             name="50-day MA",
+                                             line=dict(color="#FF8200", dash="dash", width=1.4)))
+                if len(close) >= 200:
+                    fig.add_trace(go.Scatter(x=close.index, y=close.rolling(200).mean(),
+                                             name="200-day MA",
+                                             line=dict(color="#FB7185", dash="dash", width=1.4)))
+                fig.update_layout(title=f"{sel} — 2-year price with moving averages",
+                                  height=430, hovermode="x unified")
                 st.plotly_chart(fig, width="stretch")
             with c2:
                 rets = h["Close"].pct_change().dropna()
                 if len(rets) > 10:
-                    fig = px.histogram(
-                        rets, nbins=40, title="Daily return distribution",
-                    )
+                    fig = px.histogram(rets, nbins=40, title="Daily return distribution")
                     fig.update_xaxes(tickformat=".1%")
-                    fig.update_layout(showlegend=False, height=420)
+                    fig.update_layout(showlegend=False, height=430)
                     st.plotly_chart(fig, width="stretch")
 
-with tabs[6]:
+with tab_raw:
     st.dataframe(fdf, width="stretch", hide_index=True)
     st.download_button("Download as CSV", fdf.to_csv(index=False).encode("utf-8"),
                         "screener_results.csv", "text/csv")
