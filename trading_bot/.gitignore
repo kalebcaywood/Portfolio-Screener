@@ -1,0 +1,8 @@
+# runtime artifacts — never commit live trading state
+state.json
+trades.jsonl
+account_snapshot.json
+approved_orders.json
+news_input.json
+news_signals.json
+HALT
