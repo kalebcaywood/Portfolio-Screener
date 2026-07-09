@@ -439,35 +439,57 @@ def beta_vs_benchmark(symbol_returns: pd.Series, bench_returns: pd.Series) -> fl
     return float(cov / var) if var > 0 else np.nan
 
 
-def ttest_stats(rets: pd.Series | None, bench_returns: pd.Series | None = None,
-                min_obs: int = 20) -> dict:
-    """Statistical-significance tests on a stock's daily returns.
+TTEST_LOOKBACKS = {"1y": 252, "2y": 504, "5y": None}  # None ⇒ full series
+TTEST_FIELDS = ("n", "t_mean", "p_mean", "capm_alpha", "capm_t", "capm_p")
+MIN_TTEST_OBS = 20
 
-    Two one-sample t-tests:
-      • drift  — H0: mean daily return = 0. A significant positive t means the
-        stock's average return is unlikely to be noise.
-      • alpha  — H0: mean *active* return (stock − benchmark) = 0. A significant
-        positive t means the stock's mean return beats the benchmark by more
-        than sampling noise.
-    Returns t-stats, two-sided p-values, sample size, and annualized alpha.
+
+def _one_window_ttests(r: pd.Series, bench_returns: pd.Series | None) -> dict:
+    """Drift + CAPM (Jensen's) alpha tests on one return-series window.
+
+    drift — one-sample t-test, H0: mean daily return = 0.
+    CAPM  — regress the stock's excess return on the market's excess return;
+            the intercept is Jensen's alpha. Test H0: alpha = 0 via the
+            intercept's own standard error (risk-adjusted, so a high-beta name
+            doesn't get credit for merely riding the market up).
     """
-    out = {"n_obs": 0, "t_mean": np.nan, "p_mean": np.nan,
-           "alpha_ann": np.nan, "t_alpha": np.nan, "p_alpha": np.nan}
-    if rets is None:
-        return out
-    r = rets.dropna()
-    out["n_obs"] = int(len(r))
-    if len(r) >= min_obs and float(r.std()) > 0:
+    res = {"n": int(len(r)), "t_mean": np.nan, "p_mean": np.nan,
+           "capm_alpha": np.nan, "capm_t": np.nan, "capm_p": np.nan}
+    if len(r) >= MIN_TTEST_OBS and float(r.std()) > 0:
         t, p = sps.ttest_1samp(r, 0.0)
-        out["t_mean"], out["p_mean"] = float(t), float(p)
+        res["t_mean"], res["p_mean"] = float(t), float(p)
     if bench_returns is not None:
         aligned = _align_returns(r, bench_returns)
-        if len(aligned) >= min_obs:
-            active = aligned.iloc[:, 0] - aligned.iloc[:, 1]
-            if float(active.std()) > 0:
-                t, p = sps.ttest_1samp(active, 0.0)
-                out["t_alpha"], out["p_alpha"] = float(t), float(p)
-                out["alpha_ann"] = float(active.mean() * TRADING_DAYS)
+        if len(aligned) >= MIN_TTEST_OBS:
+            rf_d = RISK_FREE_RATE / TRADING_DAYS
+            y = (aligned.iloc[:, 0] - rf_d).to_numpy()
+            x = (aligned.iloc[:, 1] - rf_d).to_numpy()
+            if np.std(x) > 0:
+                lr = sps.linregress(x, y)
+                a = float(lr.intercept)
+                se = float(getattr(lr, "intercept_stderr", np.nan) or np.nan)
+                if se > 0:
+                    tt = a / se
+                    dfree = max(len(x) - 2, 1)
+                    res["capm_alpha"] = a * TRADING_DAYS
+                    res["capm_t"] = float(tt)
+                    res["capm_p"] = float(2 * sps.t.sf(abs(tt), dfree))
+    return res
+
+
+def ttest_stats(rets: pd.Series | None, bench_returns: pd.Series | None = None) -> dict:
+    """Drift + CAPM-alpha significance at 1y / 2y / 5y lookbacks.
+
+    Emits one set of fields per lookback, suffixed ``_1y`` / ``_2y`` / ``_5y``
+    (e.g. ``t_mean_2y``, ``capm_p_5y``), so the UI can switch windows instantly
+    without re-fetching.
+    """
+    out: dict = {}
+    r_all = rets.dropna() if rets is not None else pd.Series(dtype=float)
+    for label, w in TTEST_LOOKBACKS.items():
+        r = r_all.iloc[-w:] if (w is not None and len(r_all) > w) else r_all
+        for k, v in _one_window_ttests(r, bench_returns).items():
+            out[f"{k}_{label}"] = v
     return out
 
 
@@ -655,6 +677,8 @@ def compute_metrics(symbol: str, bench_returns: pd.Series | None = None,
     m["payout_ratio"] = info.get("payoutRatio", np.nan)
 
     if close is not None and len(close) > 5:
+        close_full = close                       # up to 5y — used for the t-tests
+        close = close.iloc[-504:] if len(close) > 504 else close  # ~2y for the metrics below
         rets = returns_from_prices(close)
 
         m["ret_1m"] = total_return(close, 21)
@@ -684,13 +708,16 @@ def compute_metrics(symbol: str, bench_returns: pd.Series | None = None,
         else:
             m["beta_1y"] = info.get("beta", np.nan)
 
-        # Statistical-significance (t-test) evaluation on the return series.
-        m.update(ttest_stats(rets, bench_returns))
+        # Statistical-significance (t-test) evaluation across 1y/2y/5y windows,
+        # using the FULL (up-to-5y) return series.
+        m.update(ttest_stats(returns_from_prices(close_full), bench_returns))
     else:
         for k in ["ret_1m", "ret_3m", "ret_6m", "ret_1y", "ret_ytd", "volatility", "sharpe",
-                  "sortino", "max_dd", "rsi_14", "momentum_12_1", "pct_from_52w_high", "beta_1y",
-                  "n_obs", "t_mean", "p_mean", "alpha_ann", "t_alpha", "p_alpha"]:
+                  "sortino", "max_dd", "rsi_14", "momentum_12_1", "pct_from_52w_high", "beta_1y"]:
             m[k] = np.nan
+        for lb in TTEST_LOOKBACKS:
+            for f in TTEST_FIELDS:
+                m[f"{f}_{lb}"] = np.nan
 
     m["piotroski_f"] = (piotroski_fscore(fetch_financials(symbol))
                         if include_financials else np.nan)
@@ -713,11 +740,12 @@ def compute_portfolio(symbols: list[str], progress_callback=None,
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    # One bulk request for every ticker's prices plus the benchmark.
-    price_map = fetch_prices_bulk(tuple(symbols) + (BENCHMARK,), "2y")
+    # One bulk request for every ticker's prices plus the benchmark. 5y of
+    # history so the T-Test's 5y lookback has data; metrics still use ~2y.
+    price_map = fetch_prices_bulk(tuple(symbols) + (BENCHMARK,), "5y")
     bench_close = price_map.get(BENCHMARK)
     if bench_close is None:
-        bh = fetch_history(BENCHMARK, "2y")
+        bh = fetch_history(BENCHMARK, "5y")
         bench_close = bh["Close"] if (not bh.empty and "Close" in bh.columns) else None
     bench_returns = returns_from_prices(bench_close) if bench_close is not None else None
 

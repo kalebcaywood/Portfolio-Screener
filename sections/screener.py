@@ -301,15 +301,21 @@ with tab_risk:
 with tab_ttest:
     st.markdown("##### Statistical significance of returns (t-test)")
     st.caption(
-        "One-sample t-tests on ~2 years of daily returns. **Drift** tests H₀: "
-        "mean daily return = 0 — is the trend real or just noise? **Alpha** tests "
-        "H₀: mean return = the S&P 500's — does it beat the benchmark beyond "
-        "noise? A low p-value ⇒ reject H₀ (statistically significant)."
+        "**Drift** tests H₀: mean daily return = 0 — is the trend real or noise? "
+        "**CAPM α** regresses the stock's excess return on the market's and tests "
+        "whether the intercept (Jensen's alpha) ≠ 0 — *risk-adjusted* skill, so a "
+        "high-beta name isn't rewarded for merely riding the market up. Low p ⇒ "
+        "significant. A longer lookback = more data = more statistical power."
     )
-    if not len(fdf) or "t_mean" not in fdf.columns:
+    if not len(fdf) or "t_mean_2y" not in fdf.columns:
         st.info("Run a screen to evaluate the stocks.")
     else:
-        alpha = st.select_slider("Significance level α", options=[0.10, 0.05, 0.01], value=0.05)
+        ctl = st.columns([1.3, 1, 1.7])
+        lb = ctl[0].radio("Lookback", ["1y", "2y", "5y"], index=1, horizontal=True)
+        alpha = ctl[1].select_slider("α", options=[0.10, 0.05, 0.01], value=0.05)
+
+        def col(base):
+            return f"{base}_{lb}"
 
         def _verdict(t, p):
             if pd.isna(t) or pd.isna(p):
@@ -319,30 +325,32 @@ with tab_ttest:
             return "Not significant"
 
         tdf = fdf.copy()
-        tdf["drift"] = [_verdict(t, p) for t, p in zip(tdf["t_mean"], tdf["p_mean"])]
-        tdf["alpha_sig"] = [_verdict(t, p) for t, p in zip(tdf["t_alpha"], tdf["p_alpha"])]
+        tdf["drift"] = [_verdict(t, p) for t, p in zip(tdf[col("t_mean")], tdf[col("p_mean")])]
+        tdf["alpha_sig"] = [_verdict(t, p) for t, p in zip(tdf[col("capm_t")], tdf[col("capm_p")])]
 
-        n_drift = int(((tdf["p_mean"] < alpha) & (tdf["t_mean"] > 0)).sum())
-        n_alpha = int(((tdf["p_alpha"] < alpha) & (tdf["t_alpha"] > 0)).sum())
-        med_obs = int(tdf["n_obs"].dropna().median()) if tdf["n_obs"].notna().any() else 0
+        n_drift = int(((tdf[col("p_mean")] < alpha) & (tdf[col("t_mean")] > 0)).sum())
+        n_alpha = int(((tdf[col("capm_p")] < alpha) & (tdf[col("capm_t")] > 0)).sum())
+        med_obs = int(tdf[col("n")].dropna().median()) if tdf[col("n")].notna().any() else 0
         c = st.columns(3)
         c[0].metric("Sig. positive drift", n_drift)
-        c[1].metric("Sig. positive alpha", n_alpha)
-        c[2].metric("Daily obs / name", med_obs)
+        c[1].metric("Sig. positive CAPM α", n_alpha)
+        c[2].metric(f"Daily obs / name ({lb})", med_obs)
 
-        show = tdf[["ticker", "name", "n_obs", "ret_1y", "t_mean", "p_mean", "drift",
-                    "alpha_ann", "t_alpha", "p_alpha", "alpha_sig"]].copy()
-        show = show.sort_values("t_alpha", ascending=False)
+        show = tdf[["ticker", "name", col("n"), "ret_1y", col("t_mean"), col("p_mean"),
+                    "drift", col("capm_alpha"), col("capm_t"), col("capm_p"), "alpha_sig"]].copy()
+        show = show.sort_values(col("capm_t"), ascending=False)
         show["ret_1y"] = show["ret_1y"].apply(lambda v: f"{v:+.1%}" if pd.notna(v) else "—")
-        show["alpha_ann"] = show["alpha_ann"].apply(lambda v: f"{v:+.1%}" if pd.notna(v) else "—")
-        for cc in ("t_mean", "t_alpha"):
+        show[col("capm_alpha")] = show[col("capm_alpha")].apply(lambda v: f"{v:+.1%}" if pd.notna(v) else "—")
+        for cc in (col("t_mean"), col("capm_t")):
             show[cc] = show[cc].apply(lambda v: f"{v:+.2f}" if pd.notna(v) else "—")
-        for cc in ("p_mean", "p_alpha"):
+        for cc in (col("p_mean"), col("capm_p")):
             show[cc] = show[cc].apply(lambda v: f"{v:.3f}" if pd.notna(v) else "—")
-        show["n_obs"] = show["n_obs"].apply(lambda v: int(v) if pd.notna(v) else 0)
-        show = show.rename(columns={"t_mean": "t (drift)", "p_mean": "p (drift)",
-                                    "alpha_ann": "alpha (ann)", "t_alpha": "t (alpha)",
-                                    "p_alpha": "p (alpha)", "alpha_sig": "alpha"})
+        show[col("n")] = show[col("n")].apply(lambda v: int(v) if pd.notna(v) else 0)
+        show = show.rename(columns={
+            col("n"): "n", col("t_mean"): "t (drift)", col("p_mean"): "p (drift)",
+            col("capm_alpha"): "CAPM α (ann)", col("capm_t"): "t (α)",
+            col("capm_p"): "p (α)", "alpha_sig": "alpha",
+        })
 
         def _style_verdict(v):
             if isinstance(v, str) and v.startswith("Significant +"):
@@ -354,7 +362,7 @@ with tab_ttest:
         styled = show.style.map(_style_verdict, subset=["drift", "alpha"])
         st.dataframe(styled, width="stretch", hide_index=True)
 
-        # ── Head-to-head paired comparison ─────────────────────────────────
+        # ── Head-to-head paired comparison (respects the lookback) ─────────
         st.markdown("---")
         st.markdown("##### Head-to-head (paired t-test)")
         st.caption("Do two names differ in mean daily return by more than noise? "
@@ -364,10 +372,13 @@ with tab_ttest:
         a = cc[0].selectbox("Stock A", names, key="tt_a")
         b = cc[1].selectbox("Stock B", names, index=min(1, len(names) - 1), key="tt_b")
         if a and b and a != b:
-            ha, hb = fetch_history(a, "2y"), fetch_history(b, "2y")
+            ha, hb = fetch_history(a, "5y"), fetch_history(b, "5y")
             if not ha.empty and not hb.empty and "Close" in ha.columns and "Close" in hb.columns:
-                res = two_sample_ttest(returns_from_prices(ha["Close"]),
-                                       returns_from_prices(hb["Close"]))
+                ra, rb = returns_from_prices(ha["Close"]), returns_from_prices(hb["Close"])
+                w = {"1y": 252, "2y": 504, "5y": None}[lb]
+                if w:
+                    ra, rb = ra.iloc[-w:], rb.iloc[-w:]
+                res = two_sample_ttest(ra, rb)
                 if pd.notna(res["t"]):
                     m = st.columns(4)
                     m[0].metric(f"{a} return (ann)", f"{res['mean_a_ann']:+.1%}")
@@ -376,11 +387,11 @@ with tab_ttest:
                     m[3].metric("p-value", f"{res['p']:.3f}")
                     if res["p"] < alpha:
                         winner = a if res["diff_ann"] > 0 else b
-                        st.success(f"**Significant difference** at α={alpha} "
+                        st.success(f"**Significant difference** at α={alpha} over {lb} "
                                    f"(annualized gap {res['diff_ann']:+.1%}). "
                                    f"**{winner}** out-returns by more than sampling noise.")
                     else:
-                        st.info(f"**No significant difference** at α={alpha} "
+                        st.info(f"**No significant difference** at α={alpha} over {lb} "
                                 f"(annualized gap {res['diff_ann']:+.1%}, p={res['p']:.3f}) — "
                                 "the gap is within sampling noise.")
                 else:
