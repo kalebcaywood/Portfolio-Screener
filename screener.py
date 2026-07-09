@@ -22,6 +22,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 import yfinance as yf
+from scipy import stats as sps
 
 RISK_FREE_RATE = 0.04
 TRADING_DAYS = 252
@@ -438,6 +439,64 @@ def beta_vs_benchmark(symbol_returns: pd.Series, bench_returns: pd.Series) -> fl
     return float(cov / var) if var > 0 else np.nan
 
 
+def ttest_stats(rets: pd.Series | None, bench_returns: pd.Series | None = None,
+                min_obs: int = 20) -> dict:
+    """Statistical-significance tests on a stock's daily returns.
+
+    Two one-sample t-tests:
+      • drift  — H0: mean daily return = 0. A significant positive t means the
+        stock's average return is unlikely to be noise.
+      • alpha  — H0: mean *active* return (stock − benchmark) = 0. A significant
+        positive t means the stock's mean return beats the benchmark by more
+        than sampling noise.
+    Returns t-stats, two-sided p-values, sample size, and annualized alpha.
+    """
+    out = {"n_obs": 0, "t_mean": np.nan, "p_mean": np.nan,
+           "alpha_ann": np.nan, "t_alpha": np.nan, "p_alpha": np.nan}
+    if rets is None:
+        return out
+    r = rets.dropna()
+    out["n_obs"] = int(len(r))
+    if len(r) >= min_obs and float(r.std()) > 0:
+        t, p = sps.ttest_1samp(r, 0.0)
+        out["t_mean"], out["p_mean"] = float(t), float(p)
+    if bench_returns is not None:
+        aligned = _align_returns(r, bench_returns)
+        if len(aligned) >= min_obs:
+            active = aligned.iloc[:, 0] - aligned.iloc[:, 1]
+            if float(active.std()) > 0:
+                t, p = sps.ttest_1samp(active, 0.0)
+                out["t_alpha"], out["p_alpha"] = float(t), float(p)
+                out["alpha_ann"] = float(active.mean() * TRADING_DAYS)
+    return out
+
+
+def two_sample_ttest(rets_a: pd.Series, rets_b: pd.Series) -> dict:
+    """Paired t-test comparing the mean daily returns of two stocks.
+
+    The series are aligned on common trading dates and tested as a paired
+    difference (H0: mean[A − B] = 0). Pairing removes the shared market move,
+    so it's the right test for "does A out-return B by more than noise?".
+    """
+    out = {"n": 0, "t": np.nan, "p": np.nan, "diff_ann": np.nan,
+           "mean_a_ann": np.nan, "mean_b_ann": np.nan}
+    if rets_a is None or rets_b is None:
+        return out
+    df = _align_returns(rets_a.dropna(), rets_b.dropna())
+    out["n"] = int(len(df))
+    if len(df) < 20:
+        return out
+    a, b = df.iloc[:, 0], df.iloc[:, 1]
+    diff = a - b
+    if float(diff.std()) == 0:
+        return out
+    t, p = sps.ttest_1samp(diff, 0.0)
+    out.update(t=float(t), p=float(p), diff_ann=float(diff.mean() * TRADING_DAYS),
+               mean_a_ann=float(a.mean() * TRADING_DAYS),
+               mean_b_ann=float(b.mean() * TRADING_DAYS))
+    return out
+
+
 def _safe_loc(df: pd.DataFrame, key: str, col: int) -> float:
     if df.empty or key not in df.index or col >= df.shape[1]:
         return np.nan
@@ -624,9 +683,13 @@ def compute_metrics(symbol: str, bench_returns: pd.Series | None = None,
             m["beta_1y"] = beta_vs_benchmark(rets.iloc[-252:] if len(rets) >= 252 else rets, bench_returns)
         else:
             m["beta_1y"] = info.get("beta", np.nan)
+
+        # Statistical-significance (t-test) evaluation on the return series.
+        m.update(ttest_stats(rets, bench_returns))
     else:
         for k in ["ret_1m", "ret_3m", "ret_6m", "ret_1y", "ret_ytd", "volatility", "sharpe",
-                  "sortino", "max_dd", "rsi_14", "momentum_12_1", "pct_from_52w_high", "beta_1y"]:
+                  "sortino", "max_dd", "rsi_14", "momentum_12_1", "pct_from_52w_high", "beta_1y",
+                  "n_obs", "t_mean", "p_mean", "alpha_ann", "t_alpha", "p_alpha"]:
             m[k] = np.nan
 
     m["piotroski_f"] = (piotroski_fscore(fetch_financials(symbol))

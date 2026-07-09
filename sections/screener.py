@@ -10,7 +10,12 @@ import streamlit as st
 import universes as U
 from data import format_market_cap
 from theme import badge, inject_css, page_header
-from screener import compute_portfolio, fetch_history, returns_from_prices
+from screener import (
+    compute_portfolio,
+    fetch_history,
+    returns_from_prices,
+    two_sample_ttest,
+)
 from scoring import REC_ORDER, composite_score, recommend
 
 inject_css()
@@ -181,9 +186,9 @@ if currency_pick and "currency" in fdf.columns:
 st.caption(f"**{len(fdf)}** of {len(df)} tickers passed filters")
 
 (tab_summary, tab_rec, tab_analysis, tab_val, tab_qual,
- tab_risk, tab_rank, tab_raw) = st.tabs([
+ tab_risk, tab_ttest, tab_rank, tab_raw) = st.tabs([
     "Summary", "Recommendations", "Analysis", "Valuation", "Quality",
-    "Risk & Momentum", "Composite ranking", "Raw data",
+    "Risk & Momentum", "T-Test", "Composite ranking", "Raw data",
 ])
 
 with tab_summary:
@@ -292,6 +297,94 @@ with tab_risk:
             fig.update_xaxes(tickformat=".0%")
             fig.update_yaxes(tickformat=".0%")
             st.plotly_chart(fig, width="stretch")
+
+with tab_ttest:
+    st.markdown("##### Statistical significance of returns (t-test)")
+    st.caption(
+        "One-sample t-tests on ~2 years of daily returns. **Drift** tests H₀: "
+        "mean daily return = 0 — is the trend real or just noise? **Alpha** tests "
+        "H₀: mean return = the S&P 500's — does it beat the benchmark beyond "
+        "noise? A low p-value ⇒ reject H₀ (statistically significant)."
+    )
+    if not len(fdf) or "t_mean" not in fdf.columns:
+        st.info("Run a screen to evaluate the stocks.")
+    else:
+        alpha = st.select_slider("Significance level α", options=[0.10, 0.05, 0.01], value=0.05)
+
+        def _verdict(t, p):
+            if pd.isna(t) or pd.isna(p):
+                return "—"
+            if p < alpha:
+                return "Significant +" if t > 0 else "Significant −"
+            return "Not significant"
+
+        tdf = fdf.copy()
+        tdf["drift"] = [_verdict(t, p) for t, p in zip(tdf["t_mean"], tdf["p_mean"])]
+        tdf["alpha_sig"] = [_verdict(t, p) for t, p in zip(tdf["t_alpha"], tdf["p_alpha"])]
+
+        n_drift = int(((tdf["p_mean"] < alpha) & (tdf["t_mean"] > 0)).sum())
+        n_alpha = int(((tdf["p_alpha"] < alpha) & (tdf["t_alpha"] > 0)).sum())
+        med_obs = int(tdf["n_obs"].dropna().median()) if tdf["n_obs"].notna().any() else 0
+        c = st.columns(3)
+        c[0].metric("Sig. positive drift", n_drift)
+        c[1].metric("Sig. positive alpha", n_alpha)
+        c[2].metric("Daily obs / name", med_obs)
+
+        show = tdf[["ticker", "name", "n_obs", "ret_1y", "t_mean", "p_mean", "drift",
+                    "alpha_ann", "t_alpha", "p_alpha", "alpha_sig"]].copy()
+        show = show.sort_values("t_alpha", ascending=False)
+        show["ret_1y"] = show["ret_1y"].apply(lambda v: f"{v:+.1%}" if pd.notna(v) else "—")
+        show["alpha_ann"] = show["alpha_ann"].apply(lambda v: f"{v:+.1%}" if pd.notna(v) else "—")
+        for cc in ("t_mean", "t_alpha"):
+            show[cc] = show[cc].apply(lambda v: f"{v:+.2f}" if pd.notna(v) else "—")
+        for cc in ("p_mean", "p_alpha"):
+            show[cc] = show[cc].apply(lambda v: f"{v:.3f}" if pd.notna(v) else "—")
+        show["n_obs"] = show["n_obs"].apply(lambda v: int(v) if pd.notna(v) else 0)
+        show = show.rename(columns={"t_mean": "t (drift)", "p_mean": "p (drift)",
+                                    "alpha_ann": "alpha (ann)", "t_alpha": "t (alpha)",
+                                    "p_alpha": "p (alpha)", "alpha_sig": "alpha"})
+
+        def _style_verdict(v):
+            if isinstance(v, str) and v.startswith("Significant +"):
+                return "background-color:#11321F;color:#4ADE80;font-weight:700;"
+            if isinstance(v, str) and v.startswith("Significant −"):
+                return "background-color:#331A1A;color:#FB7185;font-weight:700;"
+            return ""
+
+        styled = show.style.map(_style_verdict, subset=["drift", "alpha"])
+        st.dataframe(styled, width="stretch", hide_index=True)
+
+        # ── Head-to-head paired comparison ─────────────────────────────────
+        st.markdown("---")
+        st.markdown("##### Head-to-head (paired t-test)")
+        st.caption("Do two names differ in mean daily return by more than noise? "
+                   "Paired on common dates so the shared market move cancels out.")
+        names = fdf["ticker"].tolist()
+        cc = st.columns(2)
+        a = cc[0].selectbox("Stock A", names, key="tt_a")
+        b = cc[1].selectbox("Stock B", names, index=min(1, len(names) - 1), key="tt_b")
+        if a and b and a != b:
+            ha, hb = fetch_history(a, "2y"), fetch_history(b, "2y")
+            if not ha.empty and not hb.empty and "Close" in ha.columns and "Close" in hb.columns:
+                res = two_sample_ttest(returns_from_prices(ha["Close"]),
+                                       returns_from_prices(hb["Close"]))
+                if pd.notna(res["t"]):
+                    m = st.columns(4)
+                    m[0].metric(f"{a} return (ann)", f"{res['mean_a_ann']:+.1%}")
+                    m[1].metric(f"{b} return (ann)", f"{res['mean_b_ann']:+.1%}")
+                    m[2].metric("t-stat", f"{res['t']:+.2f}")
+                    m[3].metric("p-value", f"{res['p']:.3f}")
+                    if res["p"] < alpha:
+                        winner = a if res["diff_ann"] > 0 else b
+                        st.success(f"**Significant difference** at α={alpha} "
+                                   f"(annualized gap {res['diff_ann']:+.1%}). "
+                                   f"**{winner}** out-returns by more than sampling noise.")
+                    else:
+                        st.info(f"**No significant difference** at α={alpha} "
+                                f"(annualized gap {res['diff_ann']:+.1%}, p={res['p']:.3f}) — "
+                                "the gap is within sampling noise.")
+                else:
+                    st.warning("Not enough overlapping history to compare these two.")
 
 with tab_rank:
     score_cols = ["ticker", "name", "sector", "score_value", "score_quality",
