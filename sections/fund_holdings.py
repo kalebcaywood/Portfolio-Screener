@@ -11,8 +11,10 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+import streamlit.components.v1 as components
 
 import bloomberg as BB
+import corr3d as C3D
 import fund_correlation as FC
 from data import fetch_sector
 from theme import COLORWAY, inject_css
@@ -676,19 +678,20 @@ with tab_corr:
                  .reset_index().sort_values("mv", ascending=False).head(top_n))
         tickers = agg["yahoo"].tolist()
 
+        # Sectors are always needed now — they group the grid AND colour the 3D
+        # field. fetch_sector is cached for a day, so repeat builds are instant.
         sector_map: dict[str, str] = {}
-        if dim in ("Sector", "Sector × Region"):
-            cached = {}
-            if "fh_sectors" in st.session_state:  # reuse the Sector tab's fetch
-                s0 = st.session_state["fh_sectors"]
-                cached = dict(zip(s0["yahoo"], s0["sector"]))
-            prog, status = st.progress(0.0), st.empty()
-            for i, t in enumerate(tickers):
-                sector_map[t] = cached.get(t) or fetch_sector(t) or "Unknown"
-                if i % 5 == 0 or i == len(tickers) - 1:
-                    prog.progress((i + 1) / len(tickers))
-                    status.text(f"Sector {i + 1}/{len(tickers)} — {t}")
-            prog.empty(); status.empty()
+        cached = {}
+        if "fh_sectors" in st.session_state:  # reuse the Sector tab's fetch
+            s0 = st.session_state["fh_sectors"]
+            cached = dict(zip(s0["yahoo"], s0["sector"]))
+        prog, status = st.progress(0.0), st.empty()
+        for i, t in enumerate(tickers):
+            sector_map[t] = cached.get(t) or fetch_sector(t) or "Unknown"
+            if i % 5 == 0 or i == len(tickers) - 1:
+                prog.progress((i + 1) / len(tickers))
+                status.text(f"Sector {i + 1}/{len(tickers)} — {t}")
+        prog.empty(); status.empty()
 
         with st.spinner("Fetching prices and computing correlations…"):
             rdf = FC.returns_matrix(tickers, window)
@@ -712,11 +715,17 @@ with tab_corr:
             group_of = {t: _label(t) for t in corr.columns}
             weights = dict(zip(agg["yahoo"], agg["mv"])) if weighted else None
             M, sizes = FC.group_correlation(corr, group_of, weights)
+
+            # 3D field needs per-holding sector/region/fund membership
+            held = df[df["yahoo"].isin(corr.columns)].copy()
+            secs = sector_map or {t: "Unknown" for t in corr.columns}
+            payload = FC.embedding_payload(corr, held, secs)
+
             st.session_state["fh_corr"] = {
                 "M": M, "sizes": sizes, "dim": dim, "window": window,
                 "n": int(len(corr.columns)), "weighted": weighted,
                 "overall": FC.overall_avg_correlation(corr, weights),
-                "extremes": FC.extremes(M),
+                "extremes": FC.extremes(M), "payload": payload,
             }
 
     res = st.session_state.get("fh_corr")
@@ -744,22 +753,53 @@ with tab_corr:
             k[2].metric("Best diversifier pair", f"{ex['min_val']:.2f}",
                         f"{ex['min_pair'][0]} ↔ {ex['min_pair'][1]}", delta_color="off")
 
-        labels = [f"{g}  ({sizes.get(g, 0)})" for g in M.index]
-        fig = px.imshow(
-            M.astype(float).values, x=labels, y=labels, text_auto=".2f",
-            aspect="auto", zmin=-0.2, zmax=1.0,
-            color_continuous_scale=["#0f3d2e", "#166534", "#3f6212", "#a16207",
-                                    "#b45309", "#b91c1c"],
-            labels=dict(color="avg ρ"),
-        )
-        fig.update_layout(height=max(430, 42 * len(M) + 130),
-                          title=f"Group return-correlation grid — {res['dim']}",
-                          margin=dict(l=10, r=10, t=50, b=10))
-        fig.update_xaxes(tickangle=-40, side="bottom")
-        st.plotly_chart(fig, width="stretch")
-        st.caption(
-            "Diagonal = internal cohesion (avg correlation among a group's own "
-            "holdings; blank if the group holds a single name). "
-            "Greener = lower correlation (more diversified); redder = higher "
-            "co-movement (more concentrated)."
-        )
+        view = st.radio("View", ["Grid", "3D exposure field"],
+                        horizontal=True, label_visibility="collapsed",
+                        key="fh_corr_view")
+
+        if view == "3D exposure field":
+            payload = res.get("payload") or {}
+            if not payload.get("nodes"):
+                st.warning("Rebuild the pivot to generate the 3D field.")
+            else:
+                st.caption(
+                    "Every holding is a dot pulled three ways at once — toward its "
+                    "**sector**, toward its **region**, and toward the **return "
+                    "pole** (harder the more it tracks the rest of the book). Where "
+                    "a dot settles shows which exposure wins. Hit **SNAP** to morph "
+                    "the same dots onto axes: X = region, Y = sector, depth = ρ to "
+                    "book. The large ringed dots are each fund's weighted centre of "
+                    "mass, trailing as the cloud moves."
+                )
+                components.html(
+                    C3D.field_html(
+                        payload, height=640,
+                        dark=st.session_state.get("ui_theme", "dark") == "dark"),
+                    height=660, scrolling=False,
+                )
+                if len(payload.get("funds", {})) < 2:
+                    st.caption(
+                        "Only one fund in view — switch the sidebar to **All funds "
+                        "(aggregate)** to watch the sleeves' centres of mass pull "
+                        "apart."
+                    )
+        else:
+            labels = [f"{g}  ({sizes.get(g, 0)})" for g in M.index]
+            fig = px.imshow(
+                M.astype(float).values, x=labels, y=labels, text_auto=".2f",
+                aspect="auto", zmin=-0.2, zmax=1.0,
+                color_continuous_scale=["#0f3d2e", "#166534", "#3f6212", "#a16207",
+                                        "#b45309", "#b91c1c"],
+                labels=dict(color="avg ρ"),
+            )
+            fig.update_layout(height=max(430, 42 * len(M) + 130),
+                              title=f"Group return-correlation grid — {res['dim']}",
+                              margin=dict(l=10, r=10, t=50, b=10))
+            fig.update_xaxes(tickangle=-40, side="bottom")
+            st.plotly_chart(fig, width="stretch")
+            st.caption(
+                "Diagonal = internal cohesion (avg correlation among a group's own "
+                "holdings; blank if the group holds a single name). "
+                "Greener = lower correlation (more diversified); redder = higher "
+                "co-movement (more concentrated)."
+            )

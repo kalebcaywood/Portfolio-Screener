@@ -150,7 +150,9 @@ def parse_bloomberg_ticker(raw) -> dict:
         symbol = " ".join(tokens[:-1])
 
     suffix, country, region = EXCHANGE_MAP.get(exch, ("", "Unknown", "Unknown"))
-    yahoo_symbol = symbol.replace("/", "-").replace(" ", "-")  # BRK/B → BRK-B
+    # A TRAILING slash is Bloomberg punctuation (BP/ LN → BP.L); an INTERIOR
+    # slash separates a share class (BRK/B → BRK-B).
+    yahoo_symbol = symbol.rstrip("/").replace("/", "-").replace(" ", "-")
     yahoo = f"{yahoo_symbol}{suffix}"
     return {"symbol": symbol, "exch": exch, "yahoo": yahoo,
             "country": country, "region": region, "security_type": security_type}
@@ -197,6 +199,11 @@ def load_bloomberg_csv(file_or_buffer) -> dict:
     ticker_col = _find_col(df.columns, ["ticker", "security", "symbol", "identifier",
                                          "bbticker", "bloomberg"])
     qty_col = _find_col(df.columns, ["quantity", "shares", "qty", "position", "units"])
+    # Exclude the ticker column: "security" is one of its aliases, and a sheet
+    # with a single "Security" column must not map it to both.
+    name_col = _find_col([c for c in df.columns if c != ticker_col],
+                         ["securityname", "name", "description", "issuer",
+                          "securitydescription", "longname", "holdingname"])
     mv_col = _find_col(df.columns, ["marketvalue", "value", "mv", "marketval",
                                      "notional", "exposure", "mktval"])
 
@@ -212,6 +219,8 @@ def load_bloomberg_csv(file_or_buffer) -> dict:
     rec = pd.DataFrame()
     rec["fund"] = df[fund_col].astype(str).str.strip() if fund_col else "Portfolio"
     rec["raw_ticker"] = df[ticker_col].astype(str).str.strip()
+    if name_col:
+        rec["security_name"] = df[name_col].astype(str).str.strip()
 
     parsed = rec["raw_ticker"].apply(parse_bloomberg_ticker)
     rec["symbol"] = parsed.apply(lambda d: d["symbol"])
