@@ -13,6 +13,7 @@ import plotly.express as px
 import streamlit as st
 
 import bloomberg as BB
+import fund_correlation as FC
 from data import fetch_sector
 from theme import COLORWAY, inject_css
 from theme import page_header
@@ -77,10 +78,10 @@ c[4].metric("Funds in view", df["fund"].nunique())
 
 st.markdown("---")
 
-(tab_geo, tab_conc, tab_sector, tab_holdings,
+(tab_geo, tab_conc, tab_sector, tab_corr, tab_holdings,
  tab_vs_fund, tab_vs_bench) = st.tabs([
     "Geographic breakdown", "Concentration heatmap", "Sector breakdown",
-    "Top holdings", "Fund vs Fund", "Fund vs Benchmark",
+    "Correlation pivot", "Top holdings", "Fund vs Fund", "Fund vs Benchmark",
 ])
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -644,3 +645,121 @@ with tab_vs_bench:
         "the iShares ETF holdings file (downloadable from BlackRock) would be "
         "the right source — that's a future enhancement."
     )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Tab: Correlation pivot — group-level return correlation
+# ══════════════════════════════════════════════════════════════════════════════
+with tab_corr:
+    st.subheader(f"Correlation pivot — {scope_label}")
+    st.caption(
+        "Average **return correlation between groups** of holdings. Off-diagonal "
+        "cells show how strongly two groups co-move; the diagonal is each group's "
+        "internal cohesion. Position-weighted by default, so large holdings count "
+        "more. Sector & geography are the pivot axes; the correlation itself is on "
+        "daily returns."
+    )
+
+    n_unique = int(df["yahoo"].nunique())
+    ctl = st.columns([1.3, 1, 1.4, 1])
+    top_n = ctl[0].slider("Holdings (top by market value)", 5,
+                          int(min(120, max(5, n_unique))),
+                          int(min(50, max(5, n_unique))), step=5)
+    window = ctl[1].radio("Window", ["1y", "2y", "5y"], index=1, horizontal=True)
+    dim = ctl[2].selectbox("Group by", ["Sector", "Region", "Sector × Region"])
+    weighted = ctl[3].checkbox("Weight by size", value=True)
+
+    if st.button("Build correlation pivot", type="primary", key="fh_corr_build"):
+        agg = (df.groupby("yahoo")
+                 .agg(mv=("market_value", "sum"), region=("region", "first"),
+                      country=("country", "first"))
+                 .reset_index().sort_values("mv", ascending=False).head(top_n))
+        tickers = agg["yahoo"].tolist()
+
+        sector_map: dict[str, str] = {}
+        if dim in ("Sector", "Sector × Region"):
+            cached = {}
+            if "fh_sectors" in st.session_state:  # reuse the Sector tab's fetch
+                s0 = st.session_state["fh_sectors"]
+                cached = dict(zip(s0["yahoo"], s0["sector"]))
+            prog, status = st.progress(0.0), st.empty()
+            for i, t in enumerate(tickers):
+                sector_map[t] = cached.get(t) or fetch_sector(t) or "Unknown"
+                if i % 5 == 0 or i == len(tickers) - 1:
+                    prog.progress((i + 1) / len(tickers))
+                    status.text(f"Sector {i + 1}/{len(tickers)} — {t}")
+            prog.empty(); status.empty()
+
+        with st.spinner("Fetching prices and computing correlations…"):
+            rdf = FC.returns_matrix(tickers, window)
+            corr = FC.correlation_matrix(rdf)
+
+        if corr.empty or len(corr) < 2:
+            st.error("Not enough overlapping price history to build a correlation "
+                     "matrix for these holdings — try more names or a shorter window.")
+        else:
+            region_map = dict(zip(agg["yahoo"], agg["region"]))
+
+            def _label(t):
+                s = sector_map.get(t, "Unknown")
+                r = region_map.get(t, "Unknown") or "Unknown"
+                if dim == "Sector":
+                    return s
+                if dim == "Region":
+                    return r
+                return f"{r} · {s}"
+
+            group_of = {t: _label(t) for t in corr.columns}
+            weights = dict(zip(agg["yahoo"], agg["mv"])) if weighted else None
+            M, sizes = FC.group_correlation(corr, group_of, weights)
+            st.session_state["fh_corr"] = {
+                "M": M, "sizes": sizes, "dim": dim, "window": window,
+                "n": int(len(corr.columns)), "weighted": weighted,
+                "overall": FC.overall_avg_correlation(corr, weights),
+                "extremes": FC.extremes(M),
+            }
+
+    res = st.session_state.get("fh_corr")
+    if res is None:
+        st.info("Set the options above and click **Build correlation pivot** — a "
+                "~50-name fund takes a few seconds (prices + sector lookups).")
+    else:
+        M, sizes = res["M"], res["sizes"]
+        st.caption(
+            f"{res['n']} holdings · {res['window']} daily returns · "
+            f"{'position-weighted' if res['weighted'] else 'equal-weight'} · "
+            f"grouped by {res['dim']}"
+        )
+
+        k = st.columns(3)
+        ov = res["overall"]
+        k[0].metric("Book-wide avg correlation", f"{ov:.2f}" if pd.notna(ov) else "—",
+                    help="Average of every distinct pairwise correlation across the "
+                         "holdings — a single read on how concentrated the book is.")
+        ex = res["extremes"]
+        if ex.get("max_pair"):
+            k[1].metric("Most-correlated groups", f"{ex['max_val']:.2f}",
+                        f"{ex['max_pair'][0]} ↔ {ex['max_pair'][1]}", delta_color="off")
+        if ex.get("min_pair"):
+            k[2].metric("Best diversifier pair", f"{ex['min_val']:.2f}",
+                        f"{ex['min_pair'][0]} ↔ {ex['min_pair'][1]}", delta_color="off")
+
+        labels = [f"{g}  ({sizes.get(g, 0)})" for g in M.index]
+        fig = px.imshow(
+            M.astype(float).values, x=labels, y=labels, text_auto=".2f",
+            aspect="auto", zmin=-0.2, zmax=1.0,
+            color_continuous_scale=["#0f3d2e", "#166534", "#3f6212", "#a16207",
+                                    "#b45309", "#b91c1c"],
+            labels=dict(color="avg ρ"),
+        )
+        fig.update_layout(height=max(430, 42 * len(M) + 130),
+                          title=f"Group return-correlation grid — {res['dim']}",
+                          margin=dict(l=10, r=10, t=50, b=10))
+        fig.update_xaxes(tickangle=-40, side="bottom")
+        st.plotly_chart(fig, width="stretch")
+        st.caption(
+            "Diagonal = internal cohesion (avg correlation among a group's own "
+            "holdings; blank if the group holds a single name). "
+            "Greener = lower correlation (more diversified); redder = higher "
+            "co-movement (more concentrated)."
+        )
