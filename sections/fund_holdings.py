@@ -7,6 +7,8 @@ fetches GICS sectors on demand, scoped to the selected fund.
 """
 from __future__ import annotations
 
+import importlib
+
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -17,6 +19,21 @@ import bloomberg as BB
 import corr3d as C3D
 import fund_correlation as FC
 from data import fetch_sector
+
+# Streamlit re-executes page scripts on every rerun but serves `import` from
+# sys.modules, which survives for the life of the process. On Cloud a deploy can
+# hot-reload this file while keeping an already-imported module object, so a new
+# page ends up calling into an old module — brand-new modules load fine (they
+# were never cached) and only previously-imported ones go stale. Reload when a
+# symbol this page needs is missing, so the app heals itself instead of needing
+# a manual reboot.
+if not hasattr(FC, "embedding_payload"):
+    FC = importlib.reload(FC)
+# bloomberg gained no new module-level symbol, so probe the behaviour the fix
+# introduced instead. A stale copy here fails silently rather than crashing —
+# it would map "BP/ LN" to the delisted BP-.L and quietly drop the holding.
+if BB.parse_bloomberg_ticker("BP/ LN")["yahoo"] != "BP.L":
+    BB = importlib.reload(BB)
 from theme import COLORWAY, inject_css
 from theme import page_header
 
