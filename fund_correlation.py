@@ -362,6 +362,65 @@ def embedding_payload(corr: pd.DataFrame, holdings: pd.DataFrame,
     }
 
 
+def fund_return_stream(rdf: pd.DataFrame, weights: pd.Series) -> pd.Series:
+    """A sleeve's daily return stream from its holdings' returns.
+
+    Weights are renormalised each day over the names that actually traded, so a
+    Tokyo holiday doesn't book a fake 0% day for the whole sleeve.
+    """
+    cols = [c for c in weights.index if c in rdf.columns]
+    if not cols:
+        return pd.Series(dtype=float)
+    w, sub = weights[cols], rdf[cols]
+    denom = sub.notna().mul(w, axis=1).sum(axis=1).replace(0, np.nan)
+    return sub.fillna(0).mul(w, axis=1).sum(axis=1) / denom
+
+
+def diversification_audit(rdf: pd.DataFrame, corr: pd.DataFrame,
+                          w_a: pd.Series, w_b: pd.Series) -> dict:
+    """Why do two sleeves move together — shared names, or shared factors?
+
+    Aggregating a sleeve cancels its holdings' idiosyncratic noise and leaves
+    factor exposure, so two funds can correlate far more than their underlying
+    holdings do. Reporting only the pairwise average makes near-identical
+    sleeves look independent, which is the mistake this is here to catch.
+
+    The counterfactual is the real test: rebuild both sleeves with every shared
+    name removed and re-correlate. Whatever survives cannot be overlap.
+    """
+    a, b = fund_return_stream(rdf, w_a), fund_return_stream(rdf, w_b)
+    both = pd.concat([a, b], axis=1).dropna()
+    fund_rho = float(both.corr().iloc[0, 1]) if len(both) > 30 else np.nan
+
+    idx = set(corr.index)
+    vals = [corr.loc[x, y] for x in w_a.index if x in idx
+            for y in w_b.index if y in idx and x != y and pd.notna(corr.loc[x, y])]
+    holding_rho = float(np.mean(vals)) if vals else np.nan
+
+    shared = sorted(set(w_a.index) & set(w_b.index))
+    overlap_w = float(sum(min(float(w_a.get(t, 0)), float(w_b.get(t, 0)))
+                          for t in shared))
+
+    rho_ex = fund_rho if not shared else np.nan
+    if shared:
+        wa2 = w_a.drop(labels=shared, errors="ignore")
+        wb2 = w_b.drop(labels=shared, errors="ignore")
+        if len(wa2) and len(wb2) and wa2.sum() > 0 and wb2.sum() > 0:
+            x = fund_return_stream(rdf, wa2 / wa2.sum())
+            y = fund_return_stream(rdf, wb2 / wb2.sum())
+            bb = pd.concat([x, y], axis=1).dropna()
+            if len(bb) > 30:
+                rho_ex = float(bb.corr().iloc[0, 1])
+
+    from_overlap = (fund_rho - rho_ex) if pd.notna(rho_ex) and pd.notna(fund_rho) else np.nan
+    share_factor = (rho_ex / fund_rho) if pd.notna(rho_ex) and fund_rho not in (0, np.nan) \
+        and pd.notna(fund_rho) and abs(fund_rho) > 1e-9 else np.nan
+    return {"fund_rho": fund_rho, "holding_rho": holding_rho,
+            "shared": shared, "overlap_weight": overlap_w,
+            "rho_ex_shared": rho_ex, "from_overlap": from_overlap,
+            "factor_share": share_factor, "n_days": int(len(both))}
+
+
 def extremes(M: pd.DataFrame) -> dict:
     """Most- and least-correlated off-diagonal group pairs from a group matrix."""
     out = {"max_pair": None, "max_val": np.nan, "min_pair": None, "min_val": np.nan}

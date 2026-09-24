@@ -547,6 +547,100 @@ with tab_vs_fund:
             })
             st.dataframe(conc_df, hide_index=True, width="stretch")
 
+            # ── Diversification audit ───────────────────────────────────
+            st.markdown("---")
+            st.markdown("##### Diversification audit")
+            st.caption(
+                "Do you get anything from owning **both** sleeves? Aggregating a "
+                "fund cancels its holdings' stock-specific noise and leaves factor "
+                "exposure, so two sleeves can move together far more than their "
+                "underlying holdings do. The test is the counterfactual: strip out "
+                "every shared name and re-correlate — whatever survives is not "
+                "overlap."
+            )
+            aud_win = st.radio("Window", ["1y", "2y", "5y"], index=1, horizontal=True,
+                               key="fh_aud_win")
+            if st.button("Run diversification audit", type="primary", key="fh_aud_go"):
+                wa = (df_a.groupby("yahoo")["market_value"].sum()
+                      .pipe(lambda s: s / s.sum()))
+                wb = (df_b.groupby("yahoo")["market_value"].sum()
+                      .pipe(lambda s: s / s.sum()))
+                uni = list(dict.fromkeys(list(wa.index) + list(wb.index)))
+                with st.spinner(f"Pricing {len(uni)} holdings…"):
+                    rdf_a = FC.returns_matrix(uni, aud_win)
+                    corr_a = FC.correlation_matrix(rdf_a)
+                if rdf_a.empty:
+                    st.error("Couldn't fetch enough price history for these holdings.")
+                else:
+                    st.session_state["fh_audit"] = (
+                        FC.diversification_audit(rdf_a, corr_a, wa, wb),
+                        fund_a, fund_b, aud_win)
+
+            aud = st.session_state.get("fh_audit")
+            if aud and aud[1] == fund_a and aud[2] == fund_b:
+                A, fa, fb, win = aud
+                fr, hr = A["fund_rho"], A["holding_rho"]
+                q = st.columns(4)
+                q[0].metric("Fund-level correlation",
+                            f"{fr:.2f}" if pd.notna(fr) else "—",
+                            help="The two sleeves' own return streams, correlated. "
+                                 "This is what an allocator feels.")
+                q[1].metric("Holding-level average",
+                            f"{hr:.2f}" if pd.notna(hr) else "—",
+                            help="Average correlation of every cross-fund pair of "
+                                 "holdings. Much lower — stock-specific noise "
+                                 "dominates until you aggregate it away.")
+                q[2].metric("Overlapping weight", f"{A['overlap_weight']:.1%}",
+                            f"{len(A['shared'])} shared names", delta_color="off")
+                q[3].metric("Correlation w/o shared names",
+                            f"{A['rho_ex_shared']:.2f}" if pd.notna(A["rho_ex_shared"]) else "—",
+                            help="Both sleeves rebuilt with every shared holding "
+                                 "removed, then re-correlated.")
+
+                fs = A["factor_share"]
+                if pd.notna(fr) and pd.notna(A["rho_ex_shared"]) and fr > 0.05:
+                    pct = max(0.0, min(1.0, fs if pd.notna(fs) else 0))
+                    if fr >= 0.7:
+                        verdict, icon = "These sleeves are largely the same bet.", "🔴"
+                    elif fr >= 0.4:
+                        verdict, icon = "Partly overlapping exposure.", "🟠"
+                    else:
+                        verdict, icon = "These sleeves are genuinely diversifying.", "🟢"
+                    st.markdown(
+                        f"{icon} **{verdict}** {fa} and {fb} correlate at "
+                        f"**{fr:.2f}** over {win}. Removing all "
+                        f"{len(A['shared'])} shared name"
+                        f"{'' if len(A['shared']) == 1 else 's'} "
+                        f"({A['overlap_weight']:.0%} of weight) only moves it to "
+                        f"**{A['rho_ex_shared']:.2f}** — so **{pct:.0%} of the "
+                        f"co-movement is shared factor exposure, not shared "
+                        f"holdings.**"
+                    )
+                    bars = pd.DataFrame({
+                        "Measure": ["Fund-level", "Without shared names",
+                                    "Holding-level average"],
+                        "rho": [fr, A["rho_ex_shared"], hr],
+                    })
+                    figa = px.bar(bars, x="rho", y="Measure", orientation="h",
+                                  text=bars["rho"].map(lambda v: f"{v:.2f}"),
+                                  range_x=[0, 1])
+                    figa.update_traces(marker_color=["#b91c1c", "#b45309", "#166534"],
+                                       textposition="outside")
+                    figa.update_layout(height=230, showlegend=False,
+                                       xaxis_title="correlation",
+                                       yaxis_title=None,
+                                       margin=dict(l=10, r=30, t=20, b=10))
+                    st.plotly_chart(figa, width="stretch")
+                    st.caption(
+                        f"{A['n_days']} overlapping trading days. The gap between "
+                        "the top and bottom bars is diversification working *inside* "
+                        "each sleeve — which is exactly what makes the two sleeves "
+                        "look alike at the top level."
+                    )
+                if A["shared"]:
+                    st.caption("Shared names: " + ", ".join(A["shared"][:20])
+                               + ("…" if len(A["shared"]) > 20 else ""))
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Tab 6: Fund vs Benchmark
