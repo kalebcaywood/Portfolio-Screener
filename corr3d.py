@@ -35,10 +35,11 @@ _TEMPLATE = r"""
     <button class="btn" id="bSpin">SPIN</button>
     <button class="btn" id="bReheat">REHEAT</button>
   </div>
+  <div id="summary"></div>
   <div id="legend"></div>
   <div id="tip"></div>
-  <div id="hint">drag to orbit · scroll to zoom · click a legend row to hide it ·
-       double-click to isolate</div>
+  <div id="hint">click a dot to see why it sits there · drag to orbit · scroll to
+       zoom · click a legend row to hide it, double-click to isolate</div>
 </div>
 <style>
   html,body{margin:0;padding:0;overflow:hidden;background:__BG__;}
@@ -74,6 +75,16 @@ _TEMPLATE = r"""
        box-shadow:0 8px 24px rgba(0,0,0,.45);}
   #tip b{color:__ACCENT__;}
   #tip .r{color:__DIM__;font-size:10px;}
+  #tip .drv{font-weight:700;letter-spacing:.06em;margin-top:2px;}
+  .bar{display:flex;height:7px;border-radius:4px;overflow:hidden;margin:5px 0 4px;
+       background:__LINE__;}
+  .bar i{display:block;height:100%;}
+  #summary{position:absolute;top:44px;left:10px;font-size:10px;color:__DIM__;
+           letter-spacing:.04em;background:__SURF__cc;border:1px solid __LINE__;
+           border-radius:6px;padding:5px 9px;max-width:330px;line-height:1.5;}
+  #summary b{color:__TXT__;font-weight:700;}
+  .lgfoot{border-top:1px solid __LINE__;margin-top:6px;padding-top:6px;
+          font-size:9px;color:__DIM__;line-height:1.6;}
   #hint{position:absolute;bottom:8px;left:12px;font-size:9.5px;color:__DIM__;
         letter-spacing:.06em;opacity:.65;}
 </style>
@@ -82,7 +93,13 @@ _TEMPLATE = r"""
 const D = __PAYLOAD__;
 const SC = __SECTOR_COLORS__, FC = __FUND_COLORS__;
 const TXT="__TXT__", DIM="__DIM__", LINE="__LINE__", ACC="__ACCENT__", BG="__BG__";
-const AX_X="#38bdf8", AX_Y="#f472b6", AX_Z=ACC;   // region / sector / ρ axes
+const AX_X="#38bdf8", AX_Y="#f472b6", AX_Z=ACC;   // region / sector / market axes
+// The three forces, in plain English. "return pole" and "rho to book" are our
+// words, not the viewer's — a dot's position is unreadable without these.
+const POLE={sector:{t:"SECTOR", s:"moves with its industry",  c:AX_Y},
+            region:{t:"REGION", s:"moves with its geography", c:AX_X},
+            "return":{t:"MARKET", s:"moves with everything",  c:AX_Z}};
+const MIXC=[AX_Y,AX_X,AX_Z];                      // sector / region / market
 if(!D || !D.nodes || D.nodes.length < 2) return;
 
 const cv=document.getElementById("cv"), ctx=cv.getContext("2d");
@@ -117,6 +134,8 @@ const FUNDS = Object.keys(D.funds||{}).map((f,i)=>({
    a different one. */
 const hidS=new Set(), hidR=new Set(), hidF=new Set();
 const shown = n => !hidS.has(n.sector) && !hidR.has(n.region);
+let sel=null;   // the clicked holding; declared here because sync() reads it
+                // during legend construction, before the camera block runs
 
 const lg=document.getElementById("legend");
 const rows=[];
@@ -143,13 +162,31 @@ function section(title, items, colorOf, hideSet, round){
     rows.push([d,it,hideSet]); lg.appendChild(d);
   });
 }
-function sync(){ rows.forEach(([d,it,set])=>d.classList.toggle("off",set.has(it))); }
+function sync(){
+  rows.forEach(([d,it,set])=>d.classList.toggle("off",set.has(it)));
+  if(sel && !shown(sel)) sel=null;   // don't leave pull lines on a hidden dot
+}
 
 section("SECTORS", D.sectors, (s,i)=>SC[i%SC.length], hidS, false);
 section("REGIONS", D.regions, ()=>DIM, hidR, false);
 if(FUNDS.length) section("FUNDS", FUNDS.map(f=>f.name),
                          (n,i)=>FUNDS[i].col, hidF, true);
 sync();
+
+// Encodings that are otherwise invisible: nothing on screen said what dot size
+// or the ringed dots meant.
+const foot=document.createElement("div"); foot.className="lgfoot";
+foot.innerHTML='dot size = position size<br>ringed dot = fund centre of mass';
+lg.appendChild(foot);
+
+// State the finding, rather than leaving the viewer to infer it.
+const DC=D.driverCounts||{};
+document.getElementById("summary").innerHTML =
+  "Each dot is a holding, sitting nearest whatever best explains how it trades." +
+  "<br>" +
+  '<b style="color:'+AX_Y+'">'+(DC.SECTOR||0)+"</b> sector-driven &nbsp;·&nbsp; " +
+  '<b style="color:'+AX_X+'">'+(DC.REGION||0)+"</b> geography-driven &nbsp;·&nbsp; " +
+  '<b style="color:'+AX_Z+'">'+(DC.MARKET||0)+"</b> market-driven";
 
 /* ── camera ───────────────────────────────────────────────────────────── */
 let theta=0.62, phi=0.30, dist=6.6, focal=0.86, spin=false;
@@ -271,14 +308,19 @@ function draw(){
   if(u>0.02 && poles){
     const P=D.poles;
     [["sector",P.sector],["region",P.region],["return",P.return]].forEach(([k,p])=>{
-      const q=project(p[0],p[1],p[2]);
+      const q=project(p[0],p[1],p[2]), M=POLE[k];
       ctx.globalAlpha=u*0.9;
-      ctx.fillStyle=ACC; ctx.beginPath();
+      ctx.fillStyle=M.c; ctx.beginPath();
       ctx.moveTo(q[0],q[1]-7); ctx.lineTo(q[0]+7,q[1]);
       ctx.lineTo(q[0],q[1]+7); ctx.lineTo(q[0]-7,q[1]); ctx.closePath(); ctx.fill();
-      ctx.fillStyle=ACC; ctx.font="700 11px ui-monospace,Menlo,Consolas,monospace";
       ctx.textAlign="center"; ctx.textBaseline="middle";
-      ctx.fillText(k.toUpperCase(), q[0], q[1]-18);
+      ctx.font="700 11px ui-monospace,Menlo,Consolas,monospace";
+      ctx.strokeStyle=BG; ctx.lineWidth=4; ctx.lineJoin="round";
+      ctx.strokeText(M.t, q[0], q[1]-19); ctx.fillStyle=M.c;
+      ctx.fillText(M.t, q[0], q[1]-19);
+      ctx.font="9px ui-monospace,Menlo,Consolas,monospace";   // plain-English gloss
+      ctx.strokeText(M.s, q[0], q[1]-8); ctx.fillStyle=DIM;
+      ctx.fillText(M.s, q[0], q[1]-8);
       ctx.globalAlpha=1;
     });
     for(const s in D.sectorAnchors)
@@ -313,7 +355,7 @@ function draw(){
     const O=[-AS,-AS,-AS];
     arrow3(O,[ 1.10*AS,-AS,-AS],AX_X,t*0.95,"REGION");
     arrow3(O,[-AS, 1.06*AS,-AS],AX_Y,t*0.95,"SECTOR");
-    arrow3(O,[-AS,-AS, 1.10*AS],AX_Z,t*0.95,"ρ TO BOOK");
+    arrow3(O,[-AS,-AS, 1.10*AS],AX_Z,t*0.95,"MOVES WITH MARKET");
 
     D.regions.forEach((r,i)=>{ if(!hidR.has(r))
       axisLabel(rx(i),-1.17*AS,-1.06*AS,r,"center",10,t*0.95); });
@@ -354,6 +396,38 @@ function draw(){
     ctx.globalAlpha=fog; ctx.fillStyle=n.col;
     ctx.beginPath(); ctx.arc(n.px,n.py,r,0,6.283); ctx.fill();
     ctx.globalAlpha=1;
+  }
+
+  // ── the selected holding's three pulls, drawn with their percentages ──
+  // This is the whole point of the layout made literal: you can see WHY a dot
+  // sits where it does instead of being asked to take the position on trust.
+  if(sel && shown(sel) && u>0.02){
+    const tgt=[[sel.sa, sel.mix[0], POLE.sector],
+               [sel.ra, sel.mix[1], POLE.region],
+               [D.poles.return, sel.mix[2], POLE["return"]]];
+    tgt.forEach(([p,pct,M])=>{
+      const q=project(p[0],p[1],p[2]);
+      ctx.globalAlpha=u*(0.35+0.55*pct/100);
+      ctx.strokeStyle=M.c; ctx.lineWidth=0.8+2.6*pct/100;
+      ctx.setLineDash([5,4]);
+      ctx.beginPath(); ctx.moveTo(sel.px,sel.py); ctx.lineTo(q[0],q[1]); ctx.stroke();
+      ctx.setLineDash([]);
+      const mx=sel.px+(q[0]-sel.px)*0.55, my=sel.py+(q[1]-sel.py)*0.55;
+      ctx.globalAlpha=u;
+      ctx.font="700 11px ui-monospace,Menlo,Consolas,monospace";
+      ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.strokeStyle=BG; ctx.lineWidth=4; ctx.lineJoin="round";
+      ctx.strokeText(pct+"%",mx,my); ctx.fillStyle=M.c;
+      ctx.fillText(pct+"%",mx,my);
+      ctx.globalAlpha=1;
+    });
+    ctx.strokeStyle="#fff"; ctx.lineWidth=1.8; ctx.globalAlpha=0.95;
+    ctx.beginPath(); ctx.arc(sel.px,sel.py,9,0,6.283); ctx.stroke();
+    ctx.font="700 10px ui-monospace,Menlo,Consolas,monospace";
+    ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.strokeStyle=BG; ctx.lineWidth=4; ctx.lineJoin="round";
+    ctx.strokeText(sel.id,sel.px,sel.py-17); ctx.fillStyle="#fff";
+    ctx.fillText(sel.id,sel.px,sel.py-17); ctx.globalAlpha=1;
   }
 
   // ── fund centroids: weighted centre of mass, with a trail ──
@@ -399,7 +473,8 @@ function draw(){
 N.forEach((n,i)=>{ const s=D.nodes[i];
   n.ax_t=s.ax*AS; n.ay_t=s.ay*AS; n.az_t=s.az*AS; });
 
-let dragging=false, lx=0, ly=0, hover=null;   // read by draw(), so declare first
+let dragging=false, lx=0, ly=0, hover=null;    // read by draw(), declare first
+let downX=0, downY=0;                          // to tell a click from a drag
 
 function loop(){
   if(mode===0 || blend>0.001) step();
@@ -413,9 +488,26 @@ function loop(){
 loop();
 
 /* ── interaction ──────────────────────────────────────────────────────── */
-cv.addEventListener("mousedown",e=>{dragging=true;lx=e.clientX;ly=e.clientY;
+function pick(mx,my){
+  let best=null, bd=16*16;
+  for(const n of N){
+    if(!shown(n)) continue;
+    const d=(n.px-mx)*(n.px-mx)+(n.py-my)*(n.py-my);
+    if(d<bd){ bd=d; best=n; }
+  }
+  return best;
+}
+cv.addEventListener("mousedown",e=>{dragging=true;lx=downX=e.clientX;ly=downY=e.clientY;
                                     cv.classList.add("drag");});
-window.addEventListener("mouseup",()=>{dragging=false;cv.classList.remove("drag");});
+window.addEventListener("mouseup",e=>{
+  const wasDrag = Math.abs(e.clientX-downX)>4 || Math.abs(e.clientY-downY)>4;
+  dragging=false; cv.classList.remove("drag");
+  if(wasDrag) return;                      // orbiting, not selecting
+  const r=cv.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top;
+  if(mx<0||my<0||mx>W||my>H) return;
+  const hit=pick(mx,my);
+  sel = (hit && hit===sel) ? null : hit;   // click the same dot again to clear
+});
 window.addEventListener("mousemove",e=>{
   // Self-heal a stuck drag: if the button was released outside the frame the
   // mouseup never reaches us, and the view would orbit on every later move.
@@ -427,23 +519,26 @@ window.addEventListener("mousemove",e=>{
   }
   const r=cv.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top;
   if(mx<0||my<0||mx>W||my>H){ hover=null; tip.style.opacity=0; return; }
-  let best=null, bd=16*16;
-  for(const n of N){
-    if(!shown(n)) continue;
-    const d=(n.px-mx)*(n.px-mx)+(n.py-my)*(n.py-my);
-    if(d<bd){ bd=d; best=n; }
-  }
-  hover=best;
+  hover=pick(mx,my);
+  const best=hover;
   if(best){
     const rho = best.rho===null ? "—" : best.rho.toFixed(2);
     const nm = (best.name && best.name!==best.id)
              ? '<span class="r">'+best.name+"</span><br>" : "";
-    tip.innerHTML = "<b>"+best.id+"</b><br>"+nm+"<br>"+
-      best.sector+" · "+best.region+"<br>"+
-      '<span class="r">weight '+(best.w*100).toFixed(2)+"%  ·  ρ to book "+rho+"</span>";
+    const m=best.mix, dc=MIXC[["SECTOR","REGION","MARKET"].indexOf(best.drv)];
+    const bar='<div class="bar">'+
+      '<i style="width:'+m[0]+'%;background:'+MIXC[0]+'"></i>'+
+      '<i style="width:'+m[1]+'%;background:'+MIXC[1]+'"></i>'+
+      '<i style="width:'+m[2]+'%;background:'+MIXC[2]+'"></i></div>';
+    tip.innerHTML = "<b>"+best.id+"</b><br>"+nm+
+      '<span class="r">'+best.sector+" · "+best.region+"  ·  "+
+        (best.w*100).toFixed(2)+"% of book</span>"+
+      '<div class="drv" style="color:'+dc+'">DRIVEN BY: '+best.drv+"</div>"+bar+
+      '<span class="r">sector '+m[0]+" · geography "+m[1]+" · market "+m[2]+
+      "<br>moves with the portfolio: "+rho+"</span>";
     tip.style.opacity=1;
-    tip.style.left=Math.min(W-250,mx+16)+"px";
-    tip.style.top=Math.min(H-110,my+14)+"px";
+    tip.style.left=Math.min(W-255,mx+16)+"px";
+    tip.style.top=Math.min(H-150,my+14)+"px";
   } else tip.style.opacity=0;
 });
 cv.addEventListener("wheel",e=>{

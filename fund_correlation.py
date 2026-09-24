@@ -179,6 +179,23 @@ def _unit(d: dict[str, float], lo: float = 0.08,
             for k, v in d.items()}
 
 
+DRIVERS = ("SECTOR", "REGION", "MARKET")
+
+
+def _pct3(a: float, b: float, c: float) -> list[int]:
+    """Three shares as whole percents that sum to exactly 100 (largest
+    remainder), so the tooltip never reads 99% or 101%."""
+    tot = a + b + c
+    if tot <= 0:
+        return [34, 33, 33]
+    raw = [100 * a / tot, 100 * b / tot, 100 * c / tot]
+    out = [int(v) for v in raw]
+    for _ in range(100 - sum(out)):
+        i = max(range(3), key=lambda k: raw[k] - out[k])
+        out[i] += 1
+    return out
+
+
 def _barycentre(ks: float, kr: float, kb: float,
                 sa: tuple[float, float, float],
                 ra: tuple[float, float, float],
@@ -294,6 +311,10 @@ def embedding_payload(corr: pd.DataFrame, holdings: pd.DataFrame,
             "rho": None if pd.isna(r) else round(float(r), 4), "r01": round(r01, 4),
             # per-node pull strengths: sector / region / whole-book
             "ks": round(ks[t], 4), "kr": round(kr[t], 4), "kb": round(kb[t], 4),
+            # the same mix as readable whole percents, plus the verdict — this
+            # is what the position encodes, so the view can state it outright
+            "mix": _pct3(ks[t], kr[t], kb[t]),
+            "drv": DRIVERS[max(range(3), key=[ks[t], kr[t], kb[t]].__getitem__)],
             # barycentric rest position — the three-way mix as an actual point
             **{k: round(v, 4) for k, v in
                zip(("bx", "by", "bz"), _barycentre(ks[t], kr[t], kb[t],
@@ -329,8 +350,9 @@ def embedding_payload(corr: pd.DataFrame, holdings: pd.DataFrame,
             continue
         fundmap[str(f)] = [[idx[t], round(float(v) / s, 5)] for t, v in sub.items()]
 
+    counts = {d: sum(1 for n in nodes if n["drv"] == d) for d in DRIVERS}
     return {
-        "nodes": nodes, "links": links,
+        "nodes": nodes, "links": links, "driverCounts": counts,
         "sectors": sectors, "regions": regions,
         "sectorAnchors": {k: [round(v, 4) for v in p] for k, p in s_anch.items()},
         "regionAnchors": {k: [round(v, 4) for v in p] for k, p in r_anch.items()},
