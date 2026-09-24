@@ -620,12 +620,21 @@ with tab_vs_fund:
                         "Measure": ["Fund-level", "Without shared names",
                                     "Holding-level average"],
                         "rho": [fr, A["rho_ex_shared"], hr],
-                    })
+                    }).dropna(subset=["rho"])
+                    # Negative correlation is the GOOD case and does happen with
+                    # real managers — a fixed [0,1] axis would hide those bars.
+                    lo = float(min(0.0, bars["rho"].min() - 0.08))
+                    hi = float(max(1.0, bars["rho"].max() + 0.08))
                     figa = px.bar(bars, x="rho", y="Measure", orientation="h",
                                   text=bars["rho"].map(lambda v: f"{v:.2f}"),
-                                  range_x=[0, 1])
-                    figa.update_traces(marker_color=["#b91c1c", "#b45309", "#166534"],
-                                       textposition="outside")
+                                  range_x=[lo, hi])
+                    # keyed by row, so a dropped NaN row can't shift the colours
+                    cmap = {"Fund-level": "#b91c1c",
+                            "Without shared names": "#b45309",
+                            "Holding-level average": "#166534"}
+                    figa.update_traces(
+                        marker_color=[cmap[m] for m in bars["Measure"]],
+                        textposition="outside")
                     figa.update_layout(height=230, showlegend=False,
                                        xaxis_title="correlation",
                                        yaxis_title=None,
