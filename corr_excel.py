@@ -9,9 +9,12 @@ Pairs are written in BOTH directions. A single direction would give a triangular
 pivot with half the grid blank; both directions make it symmetric, which is what
 someone expects when they drop it into a PivotTable.
 
-The By Sector / By Region / By Sector x Region tabs are built with AVERAGEIFS
-against that sheet rather than pre-computed numbers, so they stay live if rows
-are filtered or edited.
+Every cell is a literal value, not a formula. openpyxl cannot write a cached
+result next to a formula, so a formula-built grid reads blank in Drive, Outlook,
+Sheets and Quick Look until someone opens it in Excel and lets it calculate.
+This workbook is made to be forwarded, so the numbers live in the cells. The
+grids are averaged from the pair rows themselves, which means a PivotTable built
+off Pivot Data must reproduce them exactly.
 """
 from __future__ import annotations
 
@@ -61,11 +64,15 @@ def _style_header(ws, row, ncols):
     ws.freeze_panes = f"A{row + 1}"
 
 
-def _matrix_sheet(wb, title, labels, crit_a, crit_b, first, last, counts=None):
-    """A group x group grid of AVERAGEIFS against Pivot Data.
+def _matrix_sheet(wb, title, labels, vals, counts=None):
+    """A group x group grid of average correlations, written as plain numbers.
 
-    IFERROR guards groups holding a single name: with no distinct pairs,
-    AVERAGEIFS divides by zero.
+    Deliberately values, not AVERAGEIFS formulas. openpyxl cannot write a cached
+    result alongside a formula, so a formula-built grid reads blank in every
+    previewer — Drive, Outlook, Sheets, Quick Look — until someone opens it in
+    Excel and lets it calculate. This file gets forwarded and previewed, so the
+    numbers have to be in the cells. ``vals`` is a labels x labels DataFrame;
+    NaN (a group holding one name, so no distinct pairs) is left blank.
     """
     ws = wb.create_sheet(title)
     ws["A1"] = title
@@ -86,11 +93,6 @@ def _matrix_sheet(wb, title, labels, crit_a, crit_b, first, last, counts=None):
         ws.cell(row=top, column=2 + j, value=txt)
     _style_header(ws, top, len(labels) + 1)
 
-    # Ranges are derived from the rows actually written, not from a counter, so
-    # they cannot drift out of step with the data.
-    rho = f"'Pivot Data'!${C_RHO}${first}:${C_RHO}${last}"
-    a_rng = f"'Pivot Data'!${crit_a}${first}:${crit_a}${last}"
-    b_rng = f"'Pivot Data'!${crit_b}${first}:${crit_b}${last}"
     for i, ra in enumerate(labels):
         r = top + 1 + i
         lab = ra if counts is None else f"{ra} ({counts.get(ra, 0)})"
@@ -98,12 +100,9 @@ def _matrix_sheet(wb, title, labels, crit_a, crit_b, first, last, counts=None):
         c0.font = Font(name=FONT, bold=True, size=10)
         c0.border = BOX
         for j, rb in enumerate(labels):
-            # Match on the raw labels: the row/column headers carry a "(n)"
-            # count suffix, so pointing AVERAGEIFS at them would match nothing.
-            # Quotes inside a label would terminate the string literal early.
-            qa, qb = ra.replace('"', '""'), rb.replace('"', '""')
-            f = f'=IFERROR(AVERAGEIFS({rho},{a_rng},"{qa}",{b_rng},"{qb}"),"")'
-            cell = ws.cell(row=r, column=2 + j, value=f)
+            v = vals.loc[ra, rb]
+            cell = ws.cell(row=r, column=2 + j,
+                           value=(None if pd.isna(v) else round(float(v), 4)))
             cell.number_format = "0.00"
             cell.font = BODY
             cell.border = BOX
@@ -137,7 +136,7 @@ def build_workbook(corr: pd.DataFrame, holdings: pd.DataFrame,
     ws.title = "Pivot Data"
     ws.append(COLS)
     _style_header(ws, 1, len(COLS))
-    n = 0
+    pairs = []
     for a in tickers:
         for b in tickers:
             if a == b:
@@ -145,12 +144,14 @@ def build_workbook(corr: pd.DataFrame, holdings: pd.DataFrame,
             v = corr.loc[a, b]
             if pd.isna(v):
                 continue
-            ws.append([a, sec[a], reg[a], w[a], b, sec[b], reg[b], w[b],
-                       round(float(v), 4),
-                       "Yes" if sec[a] == sec[b] else "No",
-                       "Yes" if reg[a] == reg[b] else "No",
-                       round(w[a] * w[b], 8)])
-            n += 1
+            pairs.append([a, sec[a], reg[a], w[a], b, sec[b], reg[b], w[b],
+                          round(float(v), 4),
+                          "Yes" if sec[a] == sec[b] else "No",
+                          "Yes" if reg[a] == reg[b] else "No",
+                          round(w[a] * w[b], 8)])
+    for row in pairs:
+        ws.append(row)
+    n = len(pairs)
     first, last = 2, ws.max_row          # what was actually written
     assert last - first + 1 == n, f"wrote {n} pairs but rows span {first}-{last}"
     for r in range(first, last + 1):
@@ -171,8 +172,15 @@ def build_workbook(corr: pd.DataFrame, holdings: pd.DataFrame,
     regions = sorted({reg[t] for t in tickers})
     scount = {s: sum(1 for t in tickers if sec[t] == s) for s in sectors}
     rcount = {r: sum(1 for t in tickers if reg[t] == r) for r in regions}
-    _matrix_sheet(wb, "By Sector", sectors, C_SECA, C_SECB, first, last, scount)
-    _matrix_sheet(wb, "By Region", regions, C_REGA, C_REGB, first, last, rcount)
+    # Averaged from the pair rows just written, so the grids and the Pivot Data
+    # tab can never disagree — a PivotTable he builds must reproduce these.
+    tidy = pd.DataFrame(pairs, columns=COLS)
+    smat = (tidy.groupby(["Sector A", "Sector B"])["Correlation"].mean()
+            .unstack().reindex(index=sectors, columns=sectors))
+    rmat = (tidy.groupby(["Region A", "Region B"])["Correlation"].mean()
+            .unstack().reindex(index=regions, columns=regions))
+    _matrix_sheet(wb, "By Sector", sectors, smat, scount)
+    _matrix_sheet(wb, "By Region", regions, rmat, rcount)
 
     # ── Holdings reference ──
     hw = wb.create_sheet("Holdings")
@@ -200,9 +208,9 @@ def build_workbook(corr: pd.DataFrame, holdings: pd.DataFrame,
         ("Window", f"{window} of daily total returns"),
         ("Holdings", len(tickers)),
         ("Pairs in Pivot Data", n),
-        ("Book-wide average correlation", f"=ROUND(AVERAGE('Pivot Data'!I{first}:I{last}),3)"),
-        ("Highest pair", f"=ROUND(MAX('Pivot Data'!I{first}:I{last}),3)"),
-        ("Lowest pair", f"=ROUND(MIN('Pivot Data'!I{first}:I{last}),3)"),
+        ("Book-wide average correlation", round(float(tidy["Correlation"].mean()), 3)),
+        ("Highest pair", round(float(tidy["Correlation"].max()), 3)),
+        ("Lowest pair", round(float(tidy["Correlation"].min()), 3)),
         ("", ""),
         ("TAB", "WHAT IT IS"),
         ("Pivot Data", "One row per pair of holdings. This is the sheet to build "
