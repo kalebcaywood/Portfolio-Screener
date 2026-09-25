@@ -8,6 +8,7 @@ fetches GICS sectors on demand, scoped to the selected fund.
 from __future__ import annotations
 
 import importlib
+import io
 
 import numpy as np
 import pandas as pd
@@ -17,6 +18,7 @@ import streamlit.components.v1 as components
 
 import bloomberg as BB
 import corr3d as C3D
+import corr_excel as CX
 import fund_correlation as FC
 from data import fetch_sector
 
@@ -846,6 +848,8 @@ with tab_corr:
                 "n": int(len(corr.columns)), "weighted": weighted,
                 "overall": FC.overall_avg_correlation(corr, weights),
                 "extremes": FC.extremes(M), "payload": payload,
+                # kept so the Excel export can be rebuilt without re-fetching
+                "corr": corr, "held": held, "secs": secs,
             }
 
     res = st.session_state.get("fh_corr")
@@ -873,9 +877,28 @@ with tab_corr:
             k[2].metric("Best diversifier pair", f"{ex['min_val']:.2f}",
                         f"{ex['min_pair'][0]} ↔ {ex['min_pair'][1]}", delta_color="off")
 
-        view = st.radio("View", ["Grid", "3D exposure field"],
-                        horizontal=True, label_visibility="collapsed",
-                        key="fh_corr_view")
+        vc = st.columns([3, 1.4])
+        with vc[0]:
+            view = st.radio("View", ["Grid", "3D exposure field"],
+                            horizontal=True, label_visibility="collapsed",
+                            key="fh_corr_view")
+        with vc[1]:
+            if res.get("corr") is not None and not res["corr"].empty:
+                try:
+                    buf = io.BytesIO()
+                    CX.build_workbook(res["corr"], res["held"], res["secs"], buf,
+                                      window=res["window"], scope=scope_label)
+                    st.download_button(
+                        "⬇ Excel (pivot-ready)", data=buf.getvalue(),
+                        file_name=f"Correlation Pivot — {scope_label}.xlsx",
+                        mime=("application/vnd.openxmlformats-officedocument."
+                              "spreadsheetml.sheet"),
+                        width="stretch",
+                        help="One row per pair of holdings, ready to drop into "
+                             "an Excel PivotTable, plus pre-built sector and "
+                             "region grids.")
+                except Exception as e:                       # never block the view
+                    st.caption(f"Excel export unavailable: {e}")
 
         if view == "3D exposure field":
             payload = res.get("payload") or {}
